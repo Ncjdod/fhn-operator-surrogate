@@ -66,3 +66,6 @@ figures/
 !plots/results/*.png
 .venv
 .claude/
+
+# compiled report PDF (keep)
+!REPORT.pdf

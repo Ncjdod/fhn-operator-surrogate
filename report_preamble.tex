@@ -1,0 +1,18 @@
+% Preamble for building REPORT.pdf from REPORT.md via pandoc + a Unicode-aware
+% engine (xelatex / lualatex / tectonic). Maps the few prose Unicode symbols
+% Latin Modern lacks onto math glyphs, and keeps wide tables inside the margins.
+% \lt and \gt are native in GitHub-MathJax but undefined in LaTeX; provide them
+% so the same source renders on GitHub and compiles here.
+\providecommand{\lt}{<}
+\providecommand{\gt}{>}
+\usepackage{newunicodechar}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{‑}{-}
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\small}
+\setlength{\tabcolsep}{4pt}
