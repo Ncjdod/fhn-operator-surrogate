@@ -60,3 +60,9 @@ figures/
 # Article figures (keep with ARTICLE.md)
 !plots/
 !plots/diag_*.png
+
+# Report/results figures (keep alongside the .md documents)
+!plots/results/
+!plots/results/*.png
+.venv
+.claude/
