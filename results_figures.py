@@ -10,7 +10,6 @@ import jax.numpy as jnp
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 import pwfo_model as P
 import flowmap_model as F
@@ -123,29 +122,7 @@ def fig_bifurcation():
     print("r2_stability_bifurcation")
 
 
-# ---------- PWFO concept + far horizon ----------
-
-def fig_pwfo_concept(core):
-    params, cfg, dt = core
-    t, ys, u = firing_const_data(2, 120.0, dt, seed=3)
-    c = P._mlp(P._profile_stats(jnp.asarray(u)), params["ctx"])
-    om, _ = P.segment_rates(params, cfg, jnp.asarray(u), c)
-    Phi = np.array(dt * jnp.cumsum(om, axis=1))
-    tt = np.arange(ys.shape[1]) * dt
-    fig, ax = plt.subplots(1, 2, figsize=(13, 4.4))
-    ax[0].plot(tt, Phi[0], "C0", lw=2)
-    ax[0].set_xlabel("time t"); ax[0].set_ylabel(r"$\Phi(t)$")
-    ax[0].set_title(r"$\Phi(t)=\phi_0+\int_0^t\omega\,d\tau$ = prefix-sum, evaluable at any t")
-    ax[0].grid(alpha=.3)
-    ax[1].plot(tt, np.cos(Phi[0]), "C3", lw=1.2)
-    ax[1].set_xlabel("time t"); ax[1].set_ylabel(r"$\cos\Phi(t)$")
-    ax[1].set_title(r"$\cos k\Phi$ bounded & periodic $\forall t$ -> never decays/blows up")
-    ax[1].grid(alpha=.3)
-    fig.suptitle("PWFO backbone: time enters only through a bounded periodic phase (one-shot, no recursion)",
-                 fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{ART}/r3_pwfo_concept.png"); plt.close(fig)
-    print("r3_pwfo_concept")
-
+# ---------- PWFO far horizon ----------
 
 def fig_pwfo_farhorizon(core):
     params, cfg, dt = core
@@ -352,86 +329,6 @@ def fig_chirp_compare(flow, gen, ys, u):
     print("r10_flowmap_vs_pwfo_chirp")
 
 
-# ---------- schematic diagrams ----------
-
-def _box(ax, xy, wh, text, fc):
-    b = FancyBboxPatch(xy, wh[0], wh[1], boxstyle="round,pad=0.02,rounding_size=0.03",
-                       fc=fc, ec="0.3", lw=1.3)
-    ax.add_patch(b)
-    ax.text(xy[0] + wh[0] / 2, xy[1] + wh[1] / 2, text, ha="center", va="center", fontsize=8.5)
-
-
-def _arrow(ax, a, b):
-    ax.add_patch(FancyArrowPatch(a, b, arrowstyle="-|>", mutation_scale=13, lw=1.3, color="0.3"))
-
-
-def fig_hybrid_routing():
-    fig, ax = plt.subplots(figsize=(11, 6))
-    ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.axis("off")
-    ax.fill_between([0, 10], [0, 0], [5, 5], color="C2", alpha=0.13)
-    ax.fill_between([0, 5], [5, 5], [10, 10], color="C1", alpha=0.15)
-    ax.fill_between([5, 10], [5, 5], [10, 10], color="C3", alpha=0.15)
-    ax.text(5, 2.5, "flow-map  (recurrent, accurate)\nfull waveform + phase\nANY current, finite horizon",
-            ha="center", va="center", fontsize=12, weight="bold")
-    ax.text(2.5, 7.5, "PWFO one-shot\n(instant at any t)\nslow current", ha="center",
-            va="center", fontsize=11, weight="bold")
-    ax.text(7.5, 7.5, "unreachable corner\nfast forcing + unbounded t\n(no finite-cost exact answer)",
-            ha="center", va="center", fontsize=10.5, color="C3")
-    ax.plot([0, 10], [5, 5], color="0.4", lw=1.2, ls="--")
-    ax.plot([5, 5], [5, 10], color="0.4", lw=1.2, ls="--")
-    ax.annotate("", xy=(10, -0.2), xytext=(0, -0.2), arrowprops=dict(arrowstyle="-|>"))
-    ax.annotate("", xy=(-0.2, 10), xytext=(-0.2, 0), arrowprops=dict(arrowstyle="-|>"))
-    ax.text(5, -0.75, "current speed   max|du/dt|   ->", ha="center", fontsize=10.5)
-    ax.text(-0.75, 5, "query horizon  t   ->", va="center", rotation=90, fontsize=10.5)
-    ax.text(0.2, 2.4, "finite\nhorizon", fontsize=8, color="0.3", va="center")
-    ax.text(0.2, 7.5, "far /\nunbounded", fontsize=8, color="0.3", va="center")
-    ax.text(2.4, 9.4, "slow", fontsize=8.5, color="0.3", ha="center")
-    ax.text(7.5, 9.4, "fast", fontsize=8.5, color="0.3", ha="center")
-    ax.set_title("Hybrid routing: which surrogate answers a query (current-speed x query-horizon regime map)",
-                 fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{ART}/r11_hybrid_routing.png"); plt.close(fig)
-    print("r11_hybrid_routing")
-
-
-def fig_architecture():
-    fig, ax = plt.subplots(2, 1, figsize=(13, 9))
-    a = ax[0]; a.set_xlim(0, 12); a.set_ylim(0, 4); a.axis("off")
-    a.set_title("PWFO: one-shot operator  G(x0, u(.), t) -> x(t)", fontweight="bold", loc="left")
-    _box(a, (0.2, 2.45), (1.9, 0.95), "current\nprofile $u(\\cdot)$", "C4")
-    _box(a, (0.2, 0.55), (1.9, 0.95), "measured\nstate $x_0$", "C0")
-    _box(a, (2.6, 2.35), (3.2, 1.15), "profile encoder $\\to c$\nrates $\\omega(u),\\kappa(u)$\nwaveform $\\mu,A_k,B_k,C$", "0.85")
-    _box(a, (2.6, 0.45), (3.2, 1.15), "IC encoder\n$\\to \\phi_0,\\ \\rho_0$", "0.85")
-    _box(a, (6.3, 1.45), (2.9, 1.15),
-         "$\\Phi(t)=\\phi_0+\\int\\omega\\,d\\tau$\n$\\psi(t)=\\rho_0\\,e^{\\int\\kappa\\,d\\tau}$\n(prefix-sum, any $t$)", "C2")
-    _box(a, (9.7, 1.45), (2.1, 1.15), "$x(t)=\\mu+\\sum_k[A_k\\cos k\\Phi$\n$+B_k\\sin k\\Phi]+\\sum_j\\psi_j(\\cdots)$", "C2")
-    for s, e in [((2.1, 2.9), (2.6, 2.9)), ((2.1, 1.0), (2.6, 1.0)),
-                 ((5.8, 2.6), (6.3, 2.2)), ((5.8, 1.0), (6.3, 1.7)),
-                 ((9.2, 2.0), (9.7, 2.0))]:
-        _arrow(a, s, e)
-    a.text(6, 3.78, "time enters ONLY via bounded periodic $\\cos k\\Phi$ + decaying $\\psi$   =>   O(1) per query, no recursion",
-           ha="center", fontsize=8.5, style="italic")
-    a.text(7.75, 0.9, "waveform coeffs (from $c$)\ncombine with $\\Phi,\\psi$ in the output",
-           ha="center", fontsize=7.2, color="0.4", style="italic")
-
-    b = ax[1]; b.set_xlim(0, 12); b.set_ylim(0, 4); b.axis("off")
-    b.set_title("Flow-map stepper: learned coarse Markov integrator (recurrent)", fontweight="bold", loc="left")
-    _box(b, (0.3, 1.5), (1.7, 1.0), "$x_0$", "C0")
-    xs = [2.6, 5.0, 7.4, 9.8]
-    for k, x in enumerate(xs):
-        _box(b, (x, 1.5), (1.7, 1.0), f"$x_{{{k}}}$" if k < 3 else "$x_N$", "C2")
-    prev = (2.0, 2.0)
-    for x in xs:
-        _arrow(b, prev, (x, 2.0)); prev = (x + 1.7, 2.0)
-    for x in xs[:-1]:
-        b.text(x + 0.85, 2.65, "$+g_\\theta(x,u_t,u_{t+\\Delta})$", ha="center", fontsize=7.5)
-        b.add_patch(FancyArrowPatch((x + 0.85, 2.5), (x + 0.85, 2.05), arrowstyle="-|>",
-                                    mutation_scale=10, color="C1"))
-    b.text(6, 0.6, "coarse step $\\Delta=4\\,dt=0.2$;  cost $O(t/\\Delta)$ steps;  trained by multi-step BPTT curriculum",
-           ha="center", fontsize=8.5, style="italic")
-    fig.tight_layout(); fig.savefig(f"{ART}/r12_architecture.png"); plt.close(fig)
-    print("r12_architecture")
-
-
 def main():
     core = load_pwfo(os.path.join(HERE, "data", "pwfo_core_k20.pkl"))
     gen = load_pwfo(os.path.join(HERE, "data", "pwfo_general.pkl"))
@@ -441,7 +338,6 @@ def main():
 
     fig_dynamics()
     fig_bifurcation()
-    fig_pwfo_concept(core)
     fig_pwfo_farhorizon(core)
     fig_flowmap_grid(flow, ys, u)
     fig_phaseportraits(flow, ys, u)
@@ -454,8 +350,6 @@ def main():
     fig_nrmse_bars(flow_by, pwfo_by)
     fig_error_vs_time(flow, gen, ys, u)
     fig_chirp_compare(flow, gen, ys, u)
-    fig_hybrid_routing()
-    fig_architecture()
     print("FIGURES ->", ART)
 
 
