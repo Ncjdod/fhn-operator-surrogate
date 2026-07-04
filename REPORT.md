@@ -39,6 +39,10 @@
 - **Hybrid meets the goal.** Flow-map for accuracy at finite horizons (any current),
   PWFO for instant arbitrary-far-$t$ on slow currents; one genuinely unreachable corner
   (fast forcing **and** truly unbounded $t$) is identified and explained (§9.4, §10.5).
+- **Inference optimized past 2×.** Larger-stride distillation (Δ=0.4/0.8 with interior
+  forcing samples) makes the flow-map **2.7–6.9× faster** than reference RK4 — and at Δ=0.8
+  **more accurate than coarse RK4 at the same step**, the first regime where the learned
+  stepper beats classical integration even on non-stiff FHN (§10.7).
 - **Scales to Hodgkin–Huxley by data only.** The flow-map is the HH workhorse — a coarse
   learned step is a real speedup on a stiff system (§8.4, §12).
 
@@ -134,7 +138,7 @@ w \;=\; v-\tfrac{1}{3}v^{3}+u
 \tag{1.4}
 $$
 
-As a graph $w(v)$ this is the classic **N-shape** (or inverted-N). Its slope is $\tfrac{d}{dv}\bigl(v-\tfrac13 v^3\bigr)=1-v^2$, which vanishes at $v=\pm 1$; these two points are the **knees** of the N. Between the knees ($|v|<1$) the middle branch has positive slope and, as we will see, carries the rest states that become *unstable* and drive oscillation (more precisely those with $|v^\ast|<0.9675$; see §1.4); outside the knees ($|v|>1$) the two outer branches have negative slope and carry stable behavior. The physical reading is standard: for $v$ well below the lower knee or well above the upper knee, $\dot v$ is strongly restoring, pinning $v$ to an outer branch; the neuron sits on an outer branch, is slowly pushed by $w$ toward a knee, and then jumps — this alternation of slow drift and fast jump is the mechanism of the **relaxation oscillation**.
+As a graph $w(v)$ this is the classic **N-shape** (or inverted-N). Its slope is $\tfrac{d}{dv}\bigl(v-\tfrac13 v^3\bigr)=1-v^2$, which vanishes at $v=\pm 1$; these two points are the **knees** of the N. Between the knees ($|v|\lt 1$) the middle branch has positive slope and, as we will see, carries the rest states that become *unstable* and drive oscillation (more precisely those with $|v^\ast|\lt 0.9675$; see §1.4); outside the knees ($|v|\gt 1$) the two outer branches have negative slope and carry stable behavior. The physical reading is standard: for $v$ well below the lower knee or well above the upper knee, $\dot v$ is strongly restoring, pinning $v$ to an outer branch; the neuron sits on an outer branch, is slowly pushed by $w$ toward a knee, and then jumps — this alternation of slow drift and fast jump is the mechanism of the **relaxation oscillation**.
 
 **The linear (slow) term.** In the $w$-equation the field is affine in $(v,w)$. Its zero set is the **$w$-nullcline**,
 
@@ -146,7 +150,7 @@ $$
 
 a straight line of slope $1/b=1.25$ and intercept $a/b=0.875$. It is independent of $u$: changing the current slides the cubic nullcline (1.4) vertically but leaves the recovery line (1.5) fixed. The intersection of (1.4) and (1.5) is the rest state, analysed in §1.3.
 
-**The role of $\tau$: timescale separation.** The factor $1/\tau$ in front of the $w$-equation, with $\tau=12.5\gg 1$, makes $w$ evolve on a timescale roughly $\tau$ times slower than $v$. Formally, inspecting (1.1) shows $|\dot w|=O(1/\tau)$ while $|\dot v|=O(1)$ away from the $v$-nullcline: $v$ relaxes quickly onto an outer branch of the N while $w$ creeps along it. This **slow/fast splitting** is exactly what turns the smooth planar system into a relaxation oscillator, and it is the origin of the isostable (Floquet) contraction that the surrogate later encodes through its decay rates $\kappa_j<0$.
+**The role of $\tau$: timescale separation.** The factor $1/\tau$ in front of the $w$-equation, with $\tau=12.5\gg 1$, makes $w$ evolve on a timescale roughly $\tau$ times slower than $v$. Formally, inspecting (1.1) shows $|\dot w|=O(1/\tau)$ while $|\dot v|=O(1)$ away from the $v$-nullcline: $v$ relaxes quickly onto an outer branch of the N while $w$ creeps along it. This **slow/fast splitting** is exactly what turns the smooth planar system into a relaxation oscillator, and it is the origin of the isostable (Floquet) contraction that the surrogate later encodes through its decay rates $\kappa_j\lt 0$.
 
 **The role of $u$.** The current $u$ enters (1.1) only additively in the $v$-equation. It therefore acts as a rigid vertical translation of the $v$-nullcline (1.4). Increasing $u$ raises the cubic, sliding the rest state along the fixed line (1.5) from an outer branch toward and across the middle branch. When the rest state lies on the (central portion of the) middle branch it is unstable and the system settles onto a limit cycle: this is the **firing band**, empirically $u\in[0.33,1.42]$, with limit-cycle period $\approx 37$ (angular frequency $\omega\approx 2\pi/37\approx 0.17$) and peak-to-peak $v$-amplitude $\approx 3.8$. In §1.4 we recover the endpoints $0.33$ and $1.42$ of this band exactly from the linearization.
 
@@ -154,7 +158,7 @@ a straight line of slope $1/b=1.25$ and intercept $a/b=0.875$. It is independent
 
 We now establish that (1.1) defines an honest flow: through every initial state there passes exactly one solution, and that solution lives for all forward time. We use the Picard–Lindelöf theorem for local existence/uniqueness and a trapping-region (ultimate-boundedness) argument to rule out finite-time blow-up.
 
-**Smoothness and local Lipschitz continuity.** Each component of $f$ in (1.3) is a polynomial in $(v,w)$ (with $u$ entering as an additive constant, and for time-varying $u(t)$ we take $u(\cdot)$ measurable and bounded). Polynomials are $C^\infty$; hence $f(\cdot,u)$ is continuously differentiable in $x$, and its Jacobian (computed in §1.4) is a continuous, hence locally bounded, matrix field. By the mean-value inequality, a $C^1$ map with locally bounded derivative is **locally Lipschitz** in $x$: for every compact $\mathcal K\subset\mathbb{R}^2$ there is $L_{\mathcal K}<\infty$ with
+**Smoothness and local Lipschitz continuity.** Each component of $f$ in (1.3) is a polynomial in $(v,w)$ (with $u$ entering as an additive constant, and for time-varying $u(t)$ we take $u(\cdot)$ measurable and bounded). Polynomials are $C^\infty$; hence $f(\cdot,u)$ is continuously differentiable in $x$, and its Jacobian (computed in §1.4) is a continuous, hence locally bounded, matrix field. By the mean-value inequality, a $C^1$ map with locally bounded derivative is **locally Lipschitz** in $x$: for every compact $\mathcal K\subset\mathbb{R}^2$ there is $L_{\mathcal K}\lt \infty$ with
 
 $$
 \|f(x,u)-f(y,u)\|\le L_{\mathcal K}\,\|x-y\|
@@ -162,7 +166,7 @@ $$
 \tag{1.6}
 $$
 
-**Local existence and uniqueness (Picard–Lindelöf).** Because $f$ is continuous in $(x,t)$ (through $u(t)$) and locally Lipschitz in $x$, the Picard–Lindelöf theorem applies at every initial condition $x_0\in\mathbb{R}^2$ and initial time $t_0$: there exists $\delta>0$ and a unique solution $x:[t_0,t_0+\delta]\to\mathbb{R}^2$ of $\dot x=f(x,u)$, $x(t_0)=x_0$. Uniqueness is what makes the flow map — and hence the notion the surrogate approximates, $G(x_0,u(\cdot),t)\mapsto x(t)$ — well-defined: two trajectories with the same data cannot cross or split.
+**Local existence and uniqueness (Picard–Lindelöf).** Because $f$ is continuous in $(x,t)$ (through $u(t)$) and locally Lipschitz in $x$, the Picard–Lindelöf theorem applies at every initial condition $x_0\in\mathbb{R}^2$ and initial time $t_0$: there exists $\delta\gt 0$ and a unique solution $x:[t_0,t_0+\delta]\to\mathbb{R}^2$ of $\dot x=f(x,u)$, $x(t_0)=x_0$. Uniqueness is what makes the flow map — and hence the notion the surrogate approximates, $G(x_0,u(\cdot),t)\mapsto x(t)$ — well-defined: two trajectories with the same data cannot cross or split.
 
 **Forward completeness by a trapping region.** Local solutions can in principle escape to infinity in finite time. We exclude this by exhibiting a compact set that the flow enters and cannot leave. Define the positive-definite quadratic
 
@@ -180,7 +184,7 @@ $$
 \tag{1.8}
 $$
 
-where indeed $-vw+vw=0$. Both $P$ and $Q$ tend to $-\infty$ as their arguments grow, because the leading terms $-\tfrac13 v^4$ (quartic, $b$-independent) and $-b w^2$ (with $b=0.8>0$) dominate. To make this quantitative, use three elementary inequalities. First, $v^2\le \tfrac1{12}v^4+3$ for all $v$: writing $s=v^2\ge 0$, the function $\tfrac1{12}s^2-s+3$ has minimum $\tfrac1{12}(36)-6+3=0$ at $s=6$, so it is nonnegative. Second, by Young's inequality $|ab|\le \tfrac{a^p}{p}+\tfrac{b^{p'}}{p'}$ with exponents $p=4,\ p'=\tfrac43$, applied to $|uv|=(\lambda|v|)(|u|/\lambda)$ with $\lambda=3^{-1/4}$ chosen so that $\lambda^4/4=\tfrac1{12}$,
+where indeed $-vw+vw=0$. Both $P$ and $Q$ tend to $-\infty$ as their arguments grow, because the leading terms $-\tfrac13 v^4$ (quartic, $b$-independent) and $-b w^2$ (with $b=0.8\gt 0$) dominate. To make this quantitative, use three elementary inequalities. First, $v^2\le \tfrac1{12}v^4+3$ for all $v$: writing $s=v^2\ge 0$, the function $\tfrac1{12}s^2-s+3$ has minimum $\tfrac1{12}(36)-6+3=0$ at $s=6$, so it is nonnegative. Second, by Young's inequality $|ab|\le \tfrac{a^p}{p}+\tfrac{b^{p'}}{p'}$ with exponents $p=4,\ p'=\tfrac43$, applied to $|uv|=(\lambda|v|)(|u|/\lambda)$ with $\lambda=3^{-1/4}$ chosen so that $\lambda^4/4=\tfrac1{12}$,
 
 $$
 |u\,v|\;\le\;\frac{(\lambda|v|)^4}{4}+\frac{(|u|/\lambda)^{4/3}}{4/3}
@@ -196,14 +200,14 @@ $$
 \tag{1.9}
 $$
 
-where the quartic coefficient is $-\tfrac13+\tfrac1{12}+\tfrac1{12}=-\tfrac16$, the quadratic coefficient is $-b+\tfrac{b}{2}=-\tfrac{b}{2}$, and $C:=3+C_u+\tfrac{a^2}{2b}<\infty$. The right-hand side of (1.9) $\to-\infty$ as $\|x\|\to\infty$, so there is a radius $R_0$ with
+where the quartic coefficient is $-\tfrac13+\tfrac1{12}+\tfrac1{12}=-\tfrac16$, the quadratic coefficient is $-b+\tfrac{b}{2}=-\tfrac{b}{2}$, and $C:=3+C_u+\tfrac{a^2}{2b}\lt \infty$. The right-hand side of (1.9) $\to-\infty$ as $\|x\|\to\infty$, so there is a radius $R_0$ with
 
 $$
-\|x\|\ge R_0 \;\Longrightarrow\; \dot L\le -1<0.
+\|x\|\ge R_0 \;\Longrightarrow\; \dot L\le -1\lt 0.
 \tag{1.10}
 $$
 
-Now fix any initial state $x_0$ and choose $\ell$ large enough that (i) $x_0\in\Omega_\ell$ and (ii) $\Omega_\ell\supseteq\{\|x\|\le R_0\}$; both are possible since the ellipses $\Omega_\ell$ grow without bound. Because the closed ball $\{\|x\|\le R_0\}$ lies inside $\Omega_\ell$, no boundary point of $\Omega_\ell$ can lie in that ball (a boundary point inside the ball would be interior to $\Omega_\ell$, a contradiction); hence $\|x\|\ge R_0$ on $\partial\Omega_\ell$, so by (1.10) $\dot L<0$ there and the vector field points strictly inward everywhere on $\partial\Omega_\ell$. Hence $\Omega_\ell$ is **forward-invariant**, and the solution through $x_0$ remains in the compact set $\Omega_\ell$ for all $t\ge t_0$ for which it exists. A solution confined to a compact set cannot blow up in finite time; by the standard continuation theorem it therefore extends to all $t\ge t_0$. This proves **forward completeness**. The argument is uniform in $t$ and used only $\sup_t|u(t)|<\infty$, so it holds for every admissible time-varying current, not just constant $u$. Consequently the flow $\varphi_\tau$ and the operator $G(x_0,u(\cdot),t)$ are defined for all query times $t\ge 0$ — a prerequisite for even *asking* the surrogate to extrapolate to $t=1500$.
+Now fix any initial state $x_0$ and choose $\ell$ large enough that (i) $x_0\in\Omega_\ell$ and (ii) $\Omega_\ell\supseteq\{\|x\|\le R_0\}$; both are possible since the ellipses $\Omega_\ell$ grow without bound. Because the closed ball $\{\|x\|\le R_0\}$ lies inside $\Omega_\ell$, no boundary point of $\Omega_\ell$ can lie in that ball (a boundary point inside the ball would be interior to $\Omega_\ell$, a contradiction); hence $\|x\|\ge R_0$ on $\partial\Omega_\ell$, so by (1.10) $\dot L\lt 0$ there and the vector field points strictly inward everywhere on $\partial\Omega_\ell$. Hence $\Omega_\ell$ is **forward-invariant**, and the solution through $x_0$ remains in the compact set $\Omega_\ell$ for all $t\ge t_0$ for which it exists. A solution confined to a compact set cannot blow up in finite time; by the standard continuation theorem it therefore extends to all $t\ge t_0$. This proves **forward completeness**. The argument is uniform in $t$ and used only $\sup_t|u(t)|\lt \infty$, so it holds for every admissible time-varying current, not just constant $u$. Consequently the flow $\varphi_\tau$ and the operator $G(x_0,u(\cdot),t)$ are defined for all query times $t\ge 0$ — a prerequisite for even *asking* the surrogate to extrapolate to $t=1500$.
 
 ### 1.3 Fixed points
 
@@ -241,24 +245,24 @@ $$
 With the parameters (1.2),
 
 $$
-p=\frac{3}{0.8}-3=3.75-3=0.75>0,
+p=\frac{3}{0.8}-3=3.75-3=0.75\gt 0,
 \qquad
 q=\frac{3(0.7)}{0.8}-3u=2.625-3u .
 \tag{1.14}
 $$
 
-**Root count.** The number of real roots of $v^3+pv+q$ is governed by its discriminant $\Delta=-4p^3-27q^2$: three distinct real roots if $\Delta>0$, exactly one real root if $\Delta<0$. Here $p=0.75>0$, so $-4p^3<0$ and $-27q^2\le 0$, giving
+**Root count.** The number of real roots of $v^3+pv+q$ is governed by its discriminant $\Delta=-4p^3-27q^2$: three distinct real roots if $\Delta\gt 0$, exactly one real root if $\Delta\lt 0$. Here $p=0.75\gt 0$, so $-4p^3\lt 0$ and $-27q^2\le 0$, giving
 
 $$
-\Delta=-4p^3-27q^2<0\qquad\text{for every }q,\text{ i.e. every }u .
+\Delta=-4p^3-27q^2\lt 0\qquad\text{for every }q,\text{ i.e. every }u .
 \tag{1.15}
 $$
 
-Equivalently and more transparently, the cubic's derivative is $3(v^\ast)^2+p\ge p=0.75>0$, so the left-hand side of (1.13) is **strictly increasing** in $v^\ast$ and therefore crosses zero exactly once. Hence:
+Equivalently and more transparently, the cubic's derivative is $3(v^\ast)^2+p\ge p=0.75\gt 0$, so the left-hand side of (1.13) is **strictly increasing** in $v^\ast$ and therefore crosses zero exactly once. Hence:
 
 > For the parameters (1.2), the FHN system has **exactly one fixed point for every current $u$**. Its $v$-coordinate is the unique real root of (1.13)–(1.14), and $w^\ast$ follows from (1.11).
 
-This uniqueness is a structural fact we lean on later: there is a **single attractor** per current value (no bistability, no coexisting rest states), which is precisely why the surrogate's steady limit-cycle coefficients $(\mu,A_k,B_k)$ may depend on the current alone and not on $x_0$. The condition behind it is $p>0\iff b<1$: had $b>1$ we would get $p<0$ and, for a $u$-window where $\Delta>0$, three roots (a saddle-node/bistable regime). With $b=0.8<1$ that window is empty, so no fold bifurcation occurs and the only qualitative change available to the unique rest state as $u$ varies is a change of *stability* — the Hopf bifurcation, quantified next.
+This uniqueness is a structural fact we lean on later: there is a **single attractor** per current value (no bistability, no coexisting rest states), which is precisely why the surrogate's steady limit-cycle coefficients $(\mu,A_k,B_k)$ may depend on the current alone and not on $x_0$. The condition behind it is $p\gt 0\iff b\lt 1$: had $b\gt 1$ we would get $p\lt 0$ and, for a $u$-window where $\Delta\gt 0$, three roots (a saddle-node/bistable regime). With $b=0.8\lt 1$ that window is empty, so no fold bifurcation occurs and the only qualitative change available to the unique rest state as $u$ varies is a change of *stability* — the Hopf bifurcation, quantified next.
 
 ### 1.4 The Jacobian and what it foretells
 
@@ -283,10 +287,10 @@ $$
 \tag{1.17}
 $$
 
-**The determinant is always positive.** Since $1-b=0.2>0$ and $b=0.8>0$,
+**The determinant is always positive.** Since $1-b=0.2\gt 0$ and $b=0.8\gt 0$,
 
 $$
-\det J(x)=\frac{0.2+0.8\,v^{2}}{12.5}>0\qquad\text{for all }v .
+\det J(x)=\frac{0.2+0.8\,v^{2}}{12.5}\gt 0\qquad\text{for all }v .
 \tag{1.18}
 $$
 
@@ -308,7 +312,7 @@ v^\ast=\pm\sqrt{0.936}=\pm0.9675 .
 \tag{1.19}
 $$
 
-At these two critical $v^\ast$ values $\operatorname{tr}J=0$ while $\det J>0$, so the eigenvalues are purely imaginary, $\pm i\sqrt{\det J}$ — the hallmark of a **Hopf bifurcation**. Because $\det J>0$ and the fixed point is unique, crossing $\operatorname{tr}J=0$ is the *only* way stability can change, and it does so through a Hopf onset that (as stated in the ground truth, and not re-derived here since it requires the first Lyapunov coefficient) is supercritical, birthing the relaxation limit cycle. We can now pin the currents at which this happens by feeding (1.19) back through the fixed-point cubic (1.13)–(1.14). Solving that cubic for $u$,
+At these two critical $v^\ast$ values $\operatorname{tr}J=0$ while $\det J\gt 0$, so the eigenvalues are purely imaginary, $\pm i\sqrt{\det J}$ — the hallmark of a **Hopf bifurcation**. Because $\det J\gt 0$ and the fixed point is unique, crossing $\operatorname{tr}J=0$ is the *only* way stability can change, and it does so through a Hopf onset that (as stated in the ground truth, and not re-derived here since it requires the first Lyapunov coefficient) is supercritical, birthing the relaxation limit cycle. We can now pin the currents at which this happens by feeding (1.19) back through the fixed-point cubic (1.13)–(1.14). Solving that cubic for $u$,
 
 $$
 (v^\ast)^3+0.75\,v^\ast+2.625-3u=0
@@ -326,7 +330,7 @@ v^\ast=-0.9675:\quad u=\tfrac13\bigl(-0.906-0.726+2.625\bigr)=\tfrac13(0.993)\ap
 \tag{1.20}
 $$
 
-These are exactly the endpoints of the empirically reported **firing band $u\in[0.33,1.42]$**. As $u$ increases the unique root $v^\ast$ increases monotonically (because $q=2.625-3u$ decreases and the cubic is strictly increasing in $v^\ast$), sweeping from $v^\ast=-0.9675$ at $u=0.33$ to $v^\ast=+0.9675$ at $u=1.42$; for currents strictly inside this interval the rest state has $|v^\ast|<0.9675$, hence $\operatorname{tr}J>0$, hence it is an unstable focus and the trajectory settles onto the limit cycle; outside the band $|v^\ast|>0.9675$, so $\operatorname{tr}J<0$, the rest state is a stable focus, and the neuron is quiescent. The linearization at onset also predicts an angular frequency $\omega=\sqrt{\det J}=\sqrt{0.9488/12.5}=\sqrt{0.0759}\approx 0.28$ (using $\det J$ at $(v^\ast)^2=0.936$: $\tfrac{0.2+0.8(0.936)}{12.5}=\tfrac{0.9488}{12.5}$); the fully developed nonlinear cycle runs slower, $\omega\approx 0.17$ (period $\approx 37$), the characteristic frequency drop of a relaxation oscillator as it grows from the Hopf point. The detailed spectral, phase, and Floquet analysis — the eigenvector geometry, the asymptotic phase $\Phi$, the phase-response curve $Z(\Phi)$, and the isostable coordinates $\psi_j$ with exponents $\kappa_j<0$ — builds directly on the closed-form $J$ in (1.16) and is developed in the sections that follow.
+These are exactly the endpoints of the empirically reported **firing band $u\in[0.33,1.42]$**. As $u$ increases the unique root $v^\ast$ increases monotonically (because $q=2.625-3u$ decreases and the cubic is strictly increasing in $v^\ast$), sweeping from $v^\ast=-0.9675$ at $u=0.33$ to $v^\ast=+0.9675$ at $u=1.42$; for currents strictly inside this interval the rest state has $|v^\ast|\lt 0.9675$, hence $\operatorname{tr}J\gt 0$, hence it is an unstable focus and the trajectory settles onto the limit cycle; outside the band $|v^\ast|\gt 0.9675$, so $\operatorname{tr}J\lt 0$, the rest state is a stable focus, and the neuron is quiescent. The linearization at onset also predicts an angular frequency $\omega=\sqrt{\det J}=\sqrt{0.9488/12.5}=\sqrt{0.0759}\approx 0.28$ (using $\det J$ at $(v^\ast)^2=0.936$: $\tfrac{0.2+0.8(0.936)}{12.5}=\tfrac{0.9488}{12.5}$); the fully developed nonlinear cycle runs slower, $\omega\approx 0.17$ (period $\approx 37$), the characteristic frequency drop of a relaxation oscillator as it grows from the Hopf point. The detailed spectral, phase, and Floquet analysis — the eigenvector geometry, the asymptotic phase $\Phi$, the phase-response curve $Z(\Phi)$, and the isostable coordinates $\psi_j$ with exponents $\kappa_j\lt 0$ — builds directly on the closed-form $J$ in (1.16) and is developed in the sections that follow.
 
 These four facts — the term-by-term meaning of (1.1), well-posedness and forward completeness (§1.2), the unique rest state (§1.3), and the closed-form Jacobian with its trace-driven Hopf onset matching the firing band (§1.4) — are the ground truth against which every surrogate claim in this report is measured.
 
@@ -418,14 +422,14 @@ Two facts follow immediately and will be used repeatedly. First, $T$ is a *decre
 function of $v^{*2}$: large-magnitude $v^*$ (strongly polarized rest states) makes the
 trace negative. Second, the determinant is **always positive**: rewrite (2.6) as
 $D = \tfrac{1}{\tau}\big[\,1 - b(1 - v^{*2})\,\big]$; since $b = 0.8$ and $1 - v^{*2} \le 1$
-for every real $v^*$, we have $b(1 - v^{*2}) \le 0.8 < 1$, hence
+for every real $v^*$, we have $b(1 - v^{*2}) \le 0.8 \lt  1$, hence
 
 $$
-D = \frac{1}{\tau}\big[\,1 - b(1 - v^{*2})\,\big] > 0 \quad \text{for every real } v^*.
+D = \frac{1}{\tau}\big[\,1 - b(1 - v^{*2})\,\big] \gt  0 \quad \text{for every real } v^*.
 \tag{2.7}
 $$
 
-(When $v^{*2} > 1$ the bracket only grows, so positivity is preserved a fortiori.) The
+(When $v^{*2} \gt  1$ the bracket only grows, so positivity is preserved a fortiori.) The
 positivity of $D$ (valid throughout the physical range of $v^*$) is what forbids saddle
 points: the two eigenvalues can never have opposite real signs. Consequently **stability is
 governed by the sign of $T$ alone**, and the only bifurcation available is the eigenvalue
@@ -450,7 +454,7 @@ $$
 
 Write the discriminant as $\Delta := (T/2)^2 - D$. Two regimes arise.
 
-- **Complex (oscillatory) regime, $\Delta < 0$:** the square root is imaginary and the
+- **Complex (oscillatory) regime, $\Delta \lt  0$:** the square root is imaginary and the
   eigenvalues form a complex-conjugate pair
   $$
   \lambda_{\pm} = \sigma \pm i\,\omega, \qquad
@@ -460,25 +464,25 @@ Write the discriminant as $\Delta := (T/2)^2 - D$. Two regimes arise.
   $$
   using the notation $\sigma = \operatorname{Re}\lambda$, $\omega = \operatorname{Im}\lambda$.
   The perturbation spirals; $\sigma$ sets growth/decay and $\omega$ the rotation rate.
-- **Real regime, $\Delta \ge 0$:** both eigenvalues are real, and because $D>0$ by (2.7)
-  their product $\lambda_+\lambda_- = D > 0$ forces them to share a sign, namely the sign of
+- **Real regime, $\Delta \ge 0$:** both eigenvalues are real, and because $D\gt 0$ by (2.7)
+  their product $\lambda_+\lambda_- = D \gt  0$ forces them to share a sign, namely the sign of
   $T = \lambda_+ + \lambda_-$ (a stable or unstable node).
 
 In *both* regimes the real parts share the sign of $T$ (in the complex case both equal
 $T/2$; in the real case both eigenvalues, sharing a sign, take the sign of their sum $T$).
-Combined with $D>0$, the Routh–Hurwitz criterion for a $2\times2$ system — asymptotic
-stability $\iff T<0$ and $D>0$ — reduces here to a single inequality:
+Combined with $D\gt 0$, the Routh–Hurwitz criterion for a $2\times2$ system — asymptotic
+stability $\iff T\lt 0$ and $D\gt 0$ — reduces here to a single inequality:
 
 $$
-\text{rest state } x^* \text{ asymptotically stable} \iff T < 0, \qquad
-\text{unstable} \iff T > 0.
+\text{rest state } x^* \text{ asymptotically stable} \iff T \lt  0, \qquad
+\text{unstable} \iff T \gt  0.
 \tag{2.10}
 $$
 
 Near threshold the FHN linearization sits in the complex regime: setting $T=0$ in $\Delta$
-gives $\Delta = -D < 0$ (shown in §2.3), and $\Delta$ varies continuously, so $\Delta<0$
+gives $\Delta = -D \lt  0$ (shown in §2.3), and $\Delta$ varies continuously, so $\Delta\lt 0$
 persists in a neighborhood of the crossing. The loss of stability is therefore a *spiral*
-passing from inward ($\sigma<0$) to outward ($\sigma>0$) — a rotating instability,
+passing from inward ($\sigma\lt 0$) to outward ($\sigma\gt 0$) — a rotating instability,
 precisely the seed of a limit cycle.
 
 ### 2.3 The Hopf bifurcation condition and onset frequency
@@ -494,12 +498,12 @@ $$
 By (2.9), $\sigma = T/2$, so the crossing condition is simply
 
 $$
-\boxed{\,T(u_H) = 0 \quad\text{with}\quad D > 0\,}.
+\boxed{\,T(u_H) = 0 \quad\text{with}\quad D \gt  0\,}.
 \tag{2.12}
 $$
 
-The side condition $D>0$ guarantees the pair is genuinely complex at the crossing (so that
-$\omega\neq0$): setting $T=0$ in (2.9) gives $\Delta = (T/2)^2 - D = -D < 0$, hence
+The side condition $D\gt 0$ guarantees the pair is genuinely complex at the crossing (so that
+$\omega\neq0$): setting $T=0$ in (2.9) gives $\Delta = (T/2)^2 - D = -D \lt  0$, hence
 $\lambda_{\pm} = \pm i\sqrt{D}$ — a pure imaginary pair. The **onset (Hopf) angular
 frequency** is therefore
 
@@ -561,9 +565,9 @@ u_H^+ = \tfrac{1}{3}(0.936)(0.96747) - 0.96747 + \frac{0.96747 + 0.7}{0.8}
 \tag{2.18}
 $$
 
-Because $u(v^*)$ is strictly increasing (§2.1) and $T<0 \Leftrightarrow v^{*2}>0.936$, the
-rest state is **stable for $u < u_H^-$ and for $u > u_H^+$**, and **unstable for
-$u_H^- < u < u_H^+$**. Hence the linear theory predicts the firing band
+Because $u(v^*)$ is strictly increasing (§2.1) and $T\lt 0 \Leftrightarrow v^{*2}\gt 0.936$, the
+rest state is **stable for $u \lt  u_H^-$ and for $u \gt  u_H^+$**, and **unstable for
+$u_H^- \lt  u \lt  u_H^+$**. Hence the linear theory predicts the firing band
 
 $$
 \boxed{\,u \in [\,u_H^-,\,u_H^+\,] \approx [\,0.331,\ 1.419\,]\,},
@@ -588,9 +592,9 @@ $$
 $$
 
 At the crossings $v^{*2}=0.936$, so $\big|d\sigma/du\big| = 0.96747/1.186 \approx 0.816 \ne 0$.
-Its sign flips with the branch: at the *lower* crossing ($v^*_H<0$) $d\sigma/du > 0$ — the
+Its sign flips with the branch: at the *lower* crossing ($v^*_H\lt 0$) $d\sigma/du \gt  0$ — the
 rest state **loses** stability as $u$ increases through $u_H^-$; at the *upper* crossing
-($v^*_H>0$) $d\sigma/du < 0$ — the rest state **regains** stability through $u_H^+$. Both are
+($v^*_H\gt 0$) $d\sigma/du \lt  0$ — the rest state **regains** stability through $u_H^+$. Both are
 transversal, confirming two bona fide Hopf bifurcations at the band edges.
 
 **Frequency range.** The linear onset frequency (2.15), $\omega_H \approx 0.276$, is the
@@ -615,12 +619,12 @@ $\approx \omega_H$ and amplitude growing (to leading order) like $\sqrt{|u - u_H
 theory alone, however, cannot say on **which side** these orbits live or whether they are
 **attracting** — that is the *criticality* of the Hopf point, fixed by the sign of the
 cubic **first Lyapunov coefficient** $\ell_1$ of the normal form. For the FHN parameters
-here the bifurcation is **supercritical** ($\ell_1 < 0$): stable small-amplitude limit
-cycles emerge *inside* the band ($u_H^- < u < u_H^+$), coexisting with the now-unstable
+here the bifurcation is **supercritical** ($\ell_1 \lt  0$): stable small-amplitude limit
+cycles emerge *inside* the band ($u_H^- \lt  u \lt  u_H^+$), coexisting with the now-unstable
 spiral rest state, and grow continuously into the large relaxation oscillation of
 peak-to-peak amplitude $\approx 3.8$ in $v$. Beyond onset, therefore, the attractor is a
 genuine periodic orbit — the object whose asymptotic phase $\Phi$, Floquet exponents
-$\kappa_j<0$, and phase-response curve $Z(\Phi)$ organize the entire surrogate
+$\kappa_j\lt 0$, and phase-response curve $Z(\Phi)$ organize the entire surrogate
 construction. The reduction of (2.1) to its Hopf normal form, the explicit computation of
 $\ell_1$, and the resulting supercriticality proof are carried out in **§4**, which this
 stability analysis sets up.
@@ -699,13 +703,13 @@ which is again $\mu_\ell^{\,n}\times(\text{polynomial in }n)$, since $\binom{n}{
 
 ### 3.3 Sustained oscillation forces eigenvalues exactly on the imaginary axis
 
-We now ask what (3.6) must satisfy to represent a **bounded, non-decaying oscillation** — the minimal requirement to even *look like* a limit cycle over the long horizons of interest (the PWFO core is queried to $t=1500$, $\sim 40$ cycles, with amplitude flatness $0.93$–$0.955$, i.e. neither decay nor blow-up). Examine a single mode $t^{k}e^{\sigma_\ell t}$ as $t\to\infty$. There is a strict **trichotomy** (using $\lim_{t\to\infty}t^{k}e^{\sigma t}=0$ for $\sigma<0$ and any fixed $k\ge0$, since the exponential dominates any polynomial):
+We now ask what (3.6) must satisfy to represent a **bounded, non-decaying oscillation** — the minimal requirement to even *look like* a limit cycle over the long horizons of interest (the PWFO core is queried to $t=1500$, $\sim 40$ cycles, with amplitude flatness $0.93$–$0.955$, i.e. neither decay nor blow-up). Examine a single mode $t^{k}e^{\sigma_\ell t}$ as $t\to\infty$. There is a strict **trichotomy** (using $\lim_{t\to\infty}t^{k}e^{\sigma t}=0$ for $\sigma\lt 0$ and any fixed $k\ge0$, since the exponential dominates any polynomial):
 
 $$
 \begin{aligned}
-&\sigma_\ell>0 &&\Longrightarrow\quad t^{k}e^{\sigma_\ell t}\to\infty
+&\sigma_\ell\gt 0 &&\Longrightarrow\quad t^{k}e^{\sigma_\ell t}\to\infty
 &&\text{(blow-up),}\\
-&\sigma_\ell<0 &&\Longrightarrow\quad t^{k}e^{\sigma_\ell t}\to 0
+&\sigma_\ell\lt 0 &&\Longrightarrow\quad t^{k}e^{\sigma_\ell t}\to 0
 &&\text{(extinction),}\\
 &\sigma_\ell=0,\;k\ge 1 &&\Longrightarrow\quad t^{k}\to\infty
 &&\text{(algebraic/secular growth),}\\
@@ -749,7 +753,7 @@ $$
 \operatorname{Re}\!\Big(\frac{p^{*}Eq}{p^{*}q}\Big)\ne 0,
 $$
 
-which holds for almost every perturbation direction $E$. Thus an arbitrarily small change in $K$ turns the sustained oscillation into either exponential decay ($\sigma<0$) or exponential blow-up ($\sigma>0$) — the two behaviors the numerical results explicitly report the PWFO does *not* exhibit. A model whose desired behavior survives only on a measure-zero, perturbation-fragile set cannot be reliably learned or trusted; this is precisely the hallmark of a *non-hyperbolic*, structurally unstable configuration, the opposite of the robust (open, generic) hyperbolic conditions that well-posed dynamical models rely on.
+which holds for almost every perturbation direction $E$. Thus an arbitrarily small change in $K$ turns the sustained oscillation into either exponential decay ($\sigma\lt 0$) or exponential blow-up ($\sigma\gt 0$) — the two behaviors the numerical results explicitly report the PWFO does *not* exhibit. A model whose desired behavior survives only on a measure-zero, perturbation-fragile set cannot be reliably learned or trusted; this is precisely the hallmark of a *non-hyperbolic*, structurally unstable configuration, the opposite of the robust (open, generic) hyperbolic conditions that well-posed dynamical models rely on.
 
 ### 3.5 Even on the axis, the orbit is *neutral*, not *attracting*
 
@@ -782,7 +786,7 @@ Thus $r(t)\equiv r(0)$: **the amplitude is a conserved quantity**. Every circle 
 
 Neutrality means the amplitude cannot self-correct. The transverse "eigenvalue" governing the evolution of $r$ is identically $0$: a perturbation $r\mapsto r+\delta r$ neither grows nor decays but persists ($\delta r(t)\equiv\delta r(0)$). The orbit is **Lyapunov-marginal** — stable in the weak sense of not diverging, but *not asymptotically stable*, and certainly not attracting. Feed the surrogate a slightly-off initial amplitude and it will orbit at that wrong amplitude forever. The same conclusion holds verbatim in discrete time: a unit-circle eigenpair $\mu=e^{i\theta}$ acts as a rotation on $E_c$, $\|z_n\|$ is conserved on that subspace, and again one obtains a continuum of neutrally-stable invariant circles.
 
-### 3.6 What an attracting limit cycle actually requires: transverse contraction $|\mu_\perp|<1$, an intrinsically nonlinear mechanism
+### 3.6 What an attracting limit cycle actually requires: transverse contraction $|\mu_\perp|\lt 1$, an intrinsically nonlinear mechanism
 
 Contrast this with the object we must reproduce. Let $\gamma(t)=\gamma(t+T)$ be the true $T$-periodic FHN orbit for a fixed firing current, and linearize the *nonlinear* field $\dot x=f(x,u)$ about it. The variational equation
 
@@ -806,17 +810,17 @@ $$
 and the orbit $\gamma$ is **orbitally asymptotically stable (attracting)** if and only if
 
 $$
-|\mu_{\perp}|<1
+|\mu_{\perp}|\lt 1
 \quad\Longleftrightarrow\quad
-e^{\kappa T}<1
+e^{\kappa T}\lt 1
 \quad\Longleftrightarrow\quad
-\kappa<0 \quad(T>0),
+\kappa\lt 0 \quad(T\gt 0),
 \tag{3.10}
 $$
 
-where $\kappa$ is the transverse **Floquet exponent** — precisely the $\kappa_j<0$ isostable rate that Model Definitions 1 and 2 build in through the decaying envelopes $\psi_j(t)=\rho_{0,j}\exp\!\big(\int_0^t\kappa_j\,d\tau\big)$. Attraction *is* the statement that transverse perturbations **contract** by a factor $|\mu_\perp|<1$ each period, so the amplitude error is driven to zero and the cycle is isolated and robust (an *open* condition — structurally stable).
+where $\kappa$ is the transverse **Floquet exponent** — precisely the $\kappa_j\lt 0$ isostable rate that Model Definitions 1 and 2 build in through the decaying envelopes $\psi_j(t)=\rho_{0,j}\exp\!\big(\int_0^t\kappa_j\,d\tau\big)$. Attraction *is* the statement that transverse perturbations **contract** by a factor $|\mu_\perp|\lt 1$ each period, so the amplitude error is driven to zero and the cycle is isolated and robust (an *open* condition — structurally stable).
 
-Now the crux: a **linear** operator cannot deliver (3.10) together with sustained oscillation. In §3.5 the very subspace $E_c$ that keeps the oscillation alive has transverse amplitude multiplier *exactly* $1$ (conserved $r$), never $<1$. There is no way for a linear flow to be simultaneously neutral *along* the oscillation and contracting *across* it, because for a genuine planar oscillator the oscillation and the amplitude live in the *same* two-dimensional mode — the multiplier that sustains the swing is the same object that would have to be $<1$ to attract, and $|\mu|=1$ and $|\mu|<1$ are mutually exclusive.
+Now the crux: a **linear** operator cannot deliver (3.10) together with sustained oscillation. In §3.5 the very subspace $E_c$ that keeps the oscillation alive has transverse amplitude multiplier *exactly* $1$ (conserved $r$), never $\lt 1$. There is no way for a linear flow to be simultaneously neutral *along* the oscillation and contracting *across* it, because for a genuine planar oscillator the oscillation and the amplitude live in the *same* two-dimensional mode — the multiplier that sustains the swing is the same object that would have to be $\lt 1$ to attract, and $|\mu|=1$ and $|\mu|\lt 1$ are mutually exclusive.
 
 The mechanism that resolves this in the true system is irreducibly **nonlinear**. Near the supercritical Hopf bifurcation through which the FHN cycle is born, the dynamics reduce to the normal form in polar amplitude $r$ and angle $\theta$:
 
@@ -824,18 +828,18 @@ $$
 \dot r = \sigma\,r - \ell\,r^{3},
 \qquad
 \dot\theta = \omega,
-\qquad \ell>0,
+\qquad \ell\gt 0,
 \tag{3.11}
 $$
 
-with $\sigma=\operatorname{Re}\lambda$ of the fixed point crossing zero from below as $u$ enters the firing band ($\sigma>0$ inside it), and $\ell>0$ the (positive, "supercritical") Landau saturation coefficient. Setting $\dot r=0$ with $r>0$ gives $\sigma=\ell r^2$, so the nonzero **amplitude-saturating cubic** $-\ell r^3$ (inherited from the $-v^3/3$ term of the FHN field) produces an *isolated* stable radius
+with $\sigma=\operatorname{Re}\lambda$ of the fixed point crossing zero from below as $u$ enters the firing band ($\sigma\gt 0$ inside it), and $\ell\gt 0$ the (positive, "supercritical") Landau saturation coefficient. Setting $\dot r=0$ with $r\gt 0$ gives $\sigma=\ell r^2$, so the nonzero **amplitude-saturating cubic** $-\ell r^3$ (inherited from the $-v^3/3$ term of the FHN field) produces an *isolated* stable radius
 
 $$
 r_{*}=\sqrt{\sigma/\ell},\qquad
-\left.\frac{d\dot r}{dr}\right|_{r_{*}} = \sigma-3\ell r_{*}^{2} = \sigma-3\ell\cdot\frac{\sigma}{\ell}=-2\sigma<0,
+\left.\frac{d\dot r}{dr}\right|_{r_{*}} = \sigma-3\ell r_{*}^{2} = \sigma-3\ell\cdot\frac{\sigma}{\ell}=-2\sigma\lt 0,
 $$
 
-i.e. a genuine attracting limit cycle: outward perturbations are pushed in by $-\ell r^3$, inward ones pushed out by $\sigma r$, and the balance fixes both amplitude and its stability (the negative slope $-2\sigma$ is exactly the transverse contraction rate $\kappa$ of (3.10)). A **fixed linear operator has no term of degree $>1$ in $z$** — it can only realize $\dot r=\sigma r$ (giving $r=0$ or blow-up when $\sigma\ne0$) or $\dot r=0$ (the neutral center when $\sigma=0$). It can *never* produce a nonzero, isolated, attracting root $r_*$. **Amplitude self-correction is a nonlinear phenomenon, categorically outside the reach of any $\dot z=Kz$.** This is why the surrogates that *do* work encode the cycle nonlinearly — PWFO writes the amplitude directly into a fixed Fourier waveform $x_{\text{cycle}}=\mu+\sum_{k=1}^{K}[A_k\cos k\Phi+B_k\sin k\Phi]$ (a single attractor, independent of $x_0$), and the flow-map stepper learns a nonlinear residual $g_\theta$.
+i.e. a genuine attracting limit cycle: outward perturbations are pushed in by $-\ell r^3$, inward ones pushed out by $\sigma r$, and the balance fixes both amplitude and its stability (the negative slope $-2\sigma$ is exactly the transverse contraction rate $\kappa$ of (3.10)). A **fixed linear operator has no term of degree $\gt 1$ in $z$** — it can only realize $\dot r=\sigma r$ (giving $r=0$ or blow-up when $\sigma\ne0$) or $\dot r=0$ (the neutral center when $\sigma=0$). It can *never* produce a nonzero, isolated, attracting root $r_*$. **Amplitude self-correction is a nonlinear phenomenon, categorically outside the reach of any $\dot z=Kz$.** This is why the surrogates that *do* work encode the cycle nonlinearly — PWFO writes the amplitude directly into a fixed Fourier waveform $x_{\text{cycle}}=\mu+\sum_{k=1}^{K}[A_k\cos k\Phi+B_k\sin k\Phi]$ (a single attractor, independent of $x_0$), and the flow-map stepper learns a nonlinear residual $g_\theta$.
 
 ### 3.7 The control-conditioned (bilinear) extension inherits the defect and reintroduces recursion
 
@@ -883,7 +887,7 @@ Because the factors do not commute (3.13), the product is **ordered and non-coll
 
 ### 3.8 Synthesis
 
-A fixed linear latent operator is confined to the mode vocabulary (3.6). Sustained oscillation forces its eigenvalues onto the imaginary axis — a measure-zero, structurally unstable knife-edge — and even there the resulting center is **neutral**: a continuum of amplitudes with no self-correction, not an isolated attractor. Attraction demands a transverse Floquet multiplier $|\mu_\perp|<1$ (3.10), which in a planar oscillator is inseparably an **amplitude-saturating nonlinearity** (the cubic of the Hopf normal form (3.11)) that no degree-one map can contain. The bilinear/control-conditioned patch (3.12) keeps the model linear in the state — inheriting the same defect — while forfeiting any closed-form propagator (3.13) and forcing the ordered exponential chain (3.14) that *is* the recursion we set out to avoid. These three facts, taken together, are the rigorous justification for discarding the fixed-linear-latent Koopman model. The successful surrogates escape the obstruction by refusing to propagate a linear latent at all: they place the nonlinearity where it belongs — a fixed limit-cycle waveform written directly as a bounded Fourier series in an accumulated *scalar* phase $\Phi(t)$ (whose integral trivially commutes with itself), multiplied by explicitly decaying isostable envelopes with $\kappa_j<0$ — recovering both the attractor and the $O(1)$, recursion-free query cost.
+A fixed linear latent operator is confined to the mode vocabulary (3.6). Sustained oscillation forces its eigenvalues onto the imaginary axis — a measure-zero, structurally unstable knife-edge — and even there the resulting center is **neutral**: a continuum of amplitudes with no self-correction, not an isolated attractor. Attraction demands a transverse Floquet multiplier $|\mu_\perp|\lt 1$ (3.10), which in a planar oscillator is inseparably an **amplitude-saturating nonlinearity** (the cubic of the Hopf normal form (3.11)) that no degree-one map can contain. The bilinear/control-conditioned patch (3.12) keeps the model linear in the state — inheriting the same defect — while forfeiting any closed-form propagator (3.13) and forcing the ordered exponential chain (3.14) that *is* the recursion we set out to avoid. These three facts, taken together, are the rigorous justification for discarding the fixed-linear-latent Koopman model. The successful surrogates escape the obstruction by refusing to propagate a linear latent at all: they place the nonlinearity where it belongs — a fixed limit-cycle waveform written directly as a bounded Fourier series in an accumulated *scalar* phase $\Phi(t)$ (whose integral trivially commutes with itself), multiplied by explicitly decaying isostable envelopes with $\kappa_j\lt 0$ — recovering both the attractor and the $O(1)$, recursion-free query cost.
 
 ## 4. The Hopf normal form and the Stuart–Landau attractor
 
@@ -926,12 +930,12 @@ $$
 \qquad \sigma:=\tfrac12\operatorname{tr}J .
 $$
 
-When $\det J>\sigma^2$ the square root is imaginary, $\sqrt{\sigma^2-\det J}=i\sqrt{\det J-\sigma^2}$, giving a complex‑conjugate pair
+When $\det J\gt \sigma^2$ the square root is imaginary, $\sqrt{\sigma^2-\det J}=i\sqrt{\det J-\sigma^2}$, giving a complex‑conjugate pair
 
 $$
 \lambda_\pm(u)=\sigma(u)\pm i\,\omega(u),\qquad
 \sigma=\tfrac12\operatorname{tr}J,\quad
-\omega=\sqrt{\det J-\sigma^2}\ \ (\det J>\sigma^2).
+\omega=\sqrt{\det J-\sigma^2}\ \ (\det J\gt \sigma^2).
 $$
 
 Here **$\sigma$ is the real part** (linear growth/decay rate) and **$\omega$ the imaginary part** (linear angular frequency) of the leading eigenvalue, as fixed in the notation table.
@@ -939,14 +943,14 @@ Here **$\sigma$ is the real part** (linear growth/decay rate) and **$\omega$ the
 **The Hopf point.** With $b/\tau=0.8/12.5=0.064$ we have $\operatorname{tr}J=0.936-v^{*2}$. As $u$ increases through the lower firing threshold, the fixed point slides up the cubic nullcline, $v^{*2}$ decreases below $0.936$, and $\operatorname{tr}J$ (hence $\sigma$) changes sign from negative to positive. There is thus a critical value $u_H$ with
 
 $$
-\sigma(u_H)=0,\qquad \omega(u_H)=\omega_H>0,\qquad \sigma'(u_H)>0 .
+\sigma(u_H)=0,\qquad \omega(u_H)=\omega_H\gt 0,\qquad \sigma'(u_H)\gt 0 .
 \tag{4.2}
 $$
 
 Solving $\operatorname{tr}J=0$ gives $v^{*2}=1-b/\tau=0.936$, i.e. $v^*\approx-0.967$ on the lower branch, whence $w^*=(v^*+a)/b\approx-0.334$ and $u_H=-v^*+\tfrac13 v^{*3}+w^*\approx 0.33$, matching the ground‑truth threshold; at this point $\omega_H=\sqrt{\det J}\approx0.28$. The first condition in (4.2) says the eigenvalue pair sits exactly on the imaginary axis at $\pm i\omega_H$; the third (**transversality**, an eigenvalue‑crossing condition we take as the generic Hopf hypothesis, here with the sign dictated by the loss of stability of $x^*$ as $u$ increases) says the pair crosses the axis rightward with nonzero speed. Equations (4.2) are the *defining data of a Hopf bifurcation*, and the ground truth states the FHN limit cycle is born of a **supercritical** Hopf as $u$ crosses this threshold. Locally we may write
 
 $$
-\sigma_0:=\sigma(u)=\sigma'(u_H)\,(u-u_H)+O\!\big((u-u_H)^2\big),\qquad \sigma'(u_H)>0,
+\sigma_0:=\sigma(u)=\sigma'(u_H)\,(u-u_H)+O\!\big((u-u_H)^2\big),\qquad \sigma'(u_H)\gt 0,
 \tag{4.3}
 $$
 
@@ -1029,7 +1033,7 @@ where we have written the surviving cubic coefficient as $g_{21}=-(\beta+ic)$, d
 - $\beta:=-\Re g_{21}$, the **nonlinear saturation** (real cubic coefficient), and
 - $c:=-\Im g_{21}$, the **nonlinear frequency shift / shear** (imaginary cubic coefficient).
 
-The sign of $\beta$ is the sign of minus the *first Lyapunov coefficient*. A **supercritical** Hopf is exactly the statement $\beta>0$ (Lyapunov coefficient negative): the cubic term opposes growth. The ground truth fixes FHN in this class, so **we take $\beta>0$ throughout.** All time dependence in (4.8) is now organized into one growth/saturation channel ($\sigma_0,\beta$) and one phase channel ($\omega,c$); the next step makes that literal.
+The sign of $\beta$ is the sign of minus the *first Lyapunov coefficient*. A **supercritical** Hopf is exactly the statement $\beta\gt 0$ (Lyapunov coefficient negative): the cubic term opposes growth. The ground truth fixes FHN in this class, so **we take $\beta\gt 0$ throughout.** All time dependence in (4.8) is now organized into one growth/saturation channel ($\sigma_0,\beta$) and one phase channel ($\omega,c$); the next step makes that literal.
 
 ### 4.3 (b) Passage to polar coordinates
 
@@ -1063,7 +1067,7 @@ $$
 $$
 
 $$
-r\,\dot\theta=\omega\,r-c\,r^{3}\ \Longrightarrow\ \dot\theta=\omega-c\,r^{2}\quad(r>0).
+r\,\dot\theta=\omega\,r-c\,r^{3}\ \Longrightarrow\ \dot\theta=\omega-c\,r^{2}\quad(r\gt 0).
 \tag{4.10}
 $$
 
@@ -1118,7 +1122,7 @@ s(t)=s(0)\,e^{-2\sigma_0 t}+\frac{\beta}{\sigma_0}\big(1-e^{-2\sigma_0 t}\big).
 \tag{4.13}
 $$
 
-**Step 4 — back‑substitute $s=1/r^2$ and name the equilibrium radius.** Assume for this step $\sigma_0>0$ (so a real equilibrium radius exists) and define
+**Step 4 — back‑substitute $s=1/r^2$ and name the equilibrium radius.** Assume for this step $\sigma_0\gt 0$ (so a real equilibrium radius exists) and define
 
 $$
 r_*:=\sqrt{\sigma_0/\beta}\quad\Longrightarrow\quad \frac{\beta}{\sigma_0}=\frac{1}{r_*^2},\qquad s(0)=\frac{1}{r_0^{2}},
@@ -1144,28 +1148,28 @@ Every step above is an exact identity — no truncation beyond the cubic normal 
 
 ### 4.5 (d) Dynamical analysis: an attracting, bounded limit cycle
 
-The radial vector field is $F(r):=\sigma_0 r-\beta r^3=r(\sigma_0-\beta r^2)$, with equilibria $r=0$ and (for $\sigma_0/\beta>0$) $r=r_*$.
+The radial vector field is $F(r):=\sigma_0 r-\beta r^3=r(\sigma_0-\beta r^2)$, with equilibria $r=0$ and (for $\sigma_0/\beta\gt 0$) $r=r_*$.
 
-**Case $\sigma_0>0$ (past threshold, firing).**
+**Case $\sigma_0\gt 0$ (past threshold, firing).**
 
-*Global attraction of $r_*$.* Since $\sigma_0>0$, $e^{-2\sigma_0 t}\to 0$ as $t\to\infty$, so the bracket in (4.14) tends to $1$ and
+*Global attraction of $r_*$.* Since $\sigma_0\gt 0$, $e^{-2\sigma_0 t}\to 0$ as $t\to\infty$, so the bracket in (4.14) tends to $1$ and
 
 $$
 r(t)^2\longrightarrow r_*^2,\qquad r(t)\longrightarrow r_*
-\quad\text{for every }r_0>0 .
+\quad\text{for every }r_0\gt 0 .
 $$
 
-Thus $r_*$ is a **globally attracting radius** on $r>0$: whatever the initial amplitude, the trajectory is pulled onto the same circle. Because the approach is monotone in $s=1/r^2$ (the linear ODE (4.12) has the monotone solution $s(t)=1/r_*^2+(1/r_0^2-1/r_*^2)e^{-2\sigma_0 t}$), $r(t)$ moves monotonically toward $r_*$ and never overshoots; in particular $r(t)\le\max(r_0,r_*)$ for all $t$. The solution is **bounded by construction** — the cubic term $-\beta r^3$ saturates any growth. This is exactly the boundedness a raw learned model cannot guarantee.
+Thus $r_*$ is a **globally attracting radius** on $r\gt 0$: whatever the initial amplitude, the trajectory is pulled onto the same circle. Because the approach is monotone in $s=1/r^2$ (the linear ODE (4.12) has the monotone solution $s(t)=1/r_*^2+(1/r_0^2-1/r_*^2)e^{-2\sigma_0 t}$), $r(t)$ moves monotonically toward $r_*$ and never overshoots; in particular $r(t)\le\max(r_0,r_*)$ for all $t$. The solution is **bounded by construction** — the cubic term $-\beta r^3$ saturates any growth. This is exactly the boundedness a raw learned model cannot guarantee.
 
 *Linearized rate.* Linearize $F$ at $r_*$:
 
 $$
 F'(r)=\sigma_0-3\beta r^{2},\qquad
-F'(r_*)=\sigma_0-3\beta\,\frac{\sigma_0}{\beta}=\sigma_0-3\sigma_0=-2\sigma_0<0 .
+F'(r_*)=\sigma_0-3\beta\,\frac{\sigma_0}{\beta}=\sigma_0-3\sigma_0=-2\sigma_0\lt 0 .
 \tag{4.15}
 $$
 
-Perturbations of the radius decay like $e^{-2\sigma_0 t}$ — the **same exponent** that appears in the exact solution (4.14), a consistency check. The number $-2\sigma_0$ is the **Floquet exponent transverse to the cycle**: it is the rate at which nearby orbits collapse onto the limit cycle, and it plays the role of the isostable decay $\kappa_j<0$ of §4.6. The origin is unstable here, since $F'(0)=\sigma_0>0$.
+Perturbations of the radius decay like $e^{-2\sigma_0 t}$ — the **same exponent** that appears in the exact solution (4.14), a consistency check. The number $-2\sigma_0$ is the **Floquet exponent transverse to the cycle**: it is the rate at which nearby orbits collapse onto the limit cycle, and it plays the role of the isostable decay $\kappa_j\lt 0$ of §4.6. The origin is unstable here, since $F'(0)=\sigma_0\gt 0$.
 
 *The limit cycle.* On the attractor $r\equiv r_*$, so by (4.10) the phase advances at the *constant* rate
 
@@ -1177,29 +1181,29 @@ $$
 
 The attractor is a circle of radius $r_*$ traversed at constant angular speed $\Omega$: a **genuine attracting limit cycle**. Note the frequency $\Omega$ is *amplitude‑ (hence current‑) dependent* through the shear $c$ — the nonlinear frequency correction $-c\,r_*^2$. This is the mathematical origin of the surrogate's rule that the instantaneous frequency $\omega_s$ depends on the local current.
 
-**Case $\sigma_0<0$ (below threshold, quiescent).** Now $r_*^2=\sigma_0/\beta<0$ has no real root, so $r_*$ is not a real amplitude and the compact form (4.14) is no longer the convenient representation; we read the dynamics off the linear solution (4.13) instead. The only equilibrium of $F$ is $r=0$, and $F'(0)=\sigma_0<0$, so the origin is **asymptotically stable**. Explicitly, put $\gamma:=-2\sigma_0>0$; then (4.13) gives
+**Case $\sigma_0\lt 0$ (below threshold, quiescent).** Now $r_*^2=\sigma_0/\beta\lt 0$ has no real root, so $r_*$ is not a real amplitude and the compact form (4.14) is no longer the convenient representation; we read the dynamics off the linear solution (4.13) instead. The only equilibrium of $F$ is $r=0$, and $F'(0)=\sigma_0\lt 0$, so the origin is **asymptotically stable**. Explicitly, put $\gamma:=-2\sigma_0\gt 0$; then (4.13) gives
 
 $$
 s(t)=\Big(\tfrac{1}{r_0^{2}}-\tfrac{\beta}{\sigma_0}\Big)e^{\gamma t}+\frac{\beta}{\sigma_0}.
 $$
 
-Since $\beta>0$ and $\sigma_0<0$ we have $\beta/\sigma_0<0$, so the coefficient $1/r_0^{2}-\beta/\sigma_0>0$; therefore $s(t)=1/r(t)^2\to+\infty$ and consequently $r(t)\to 0$. The amplitude decays to rest.
+Since $\beta\gt 0$ and $\sigma_0\lt 0$ we have $\beta/\sigma_0\lt 0$, so the coefficient $1/r_0^{2}-\beta/\sigma_0\gt 0$; therefore $s(t)=1/r(t)^2\to+\infty$ and consequently $r(t)\to 0$. The amplitude decays to rest.
 
 **Supercriticality.** Combining the two cases: as $u$ crosses $u_H$ and $\sigma_0$ (4.3) changes sign from $-$ to $+$, the stable fixed point loses stability and a **stable small‑amplitude limit cycle is born**, of radius
 
 $$
 r_*=\sqrt{\frac{\sigma_0}{\beta}}=\sqrt{\frac{\sigma'(u_H)}{\beta}}\,\big(u-u_H\big)^{1/2}+\cdots
-\qquad(\sigma'(u_H)>0,\ \beta>0),
+\qquad(\sigma'(u_H)\gt 0,\ \beta\gt 0),
 \tag{4.17}
 $$
 
-which is real precisely because both $\sigma'(u_H)>0$ (transversality, 4.2) and $\beta>0$ (supercriticality). The square‑root growth of amplitude in the bifurcation parameter is the fingerprint of a **supercritical Hopf**, matching the ground truth. Two caveats fix the scope of validity. First, (4.8)–(4.17) are *local*: they are asymptotically exact only for $u$ near $u_H$ and $r$ near $r_*$. Farther into the firing band the FHN cycle is a large **relaxation oscillation** (period $\sim 37$, $\omega\sim0.17$, peak‑to‑peak $v$‑amplitude $\sim 3.8$), no longer a small circle; the *quantitative* $r_*\!\sim\!\sqrt{u-u_H}$ ceases to hold. Second, the *qualitative* structure survives across the whole band: a single attracting amplitude, an exponentially contracting transverse direction, and a phase advancing at a nearly constant, current‑dependent rate. It is this structure — not the small‑amplitude formula — that the surrogate encodes and fits to data.
+which is real precisely because both $\sigma'(u_H)\gt 0$ (transversality, 4.2) and $\beta\gt 0$ (supercriticality). The square‑root growth of amplitude in the bifurcation parameter is the fingerprint of a **supercritical Hopf**, matching the ground truth. Two caveats fix the scope of validity. First, (4.8)–(4.17) are *local*: they are asymptotically exact only for $u$ near $u_H$ and $r$ near $r_*$. Farther into the firing band the FHN cycle is a large **relaxation oscillation** (period $\sim 37$, $\omega\sim0.17$, peak‑to‑peak $v$‑amplitude $\sim 3.8$), no longer a small circle; the *quantitative* $r_*\!\sim\!\sqrt{u-u_H}$ ceases to hold. Second, the *qualitative* structure survives across the whole band: a single attracting amplitude, an exponentially contracting transverse direction, and a phase advancing at a nearly constant, current‑dependent rate. It is this structure — not the small‑amplitude formula — that the surrogate encodes and fits to data.
 
 ### 4.6 (e) Why this repairs the surrogate: closed‑form amplitude ⇒ PWFO
 
 The Stuart–Landau solution reveals that a Hopf oscillator's state can be written *exactly* as **a decaying amplitude times a periodic function of a phase**, with both amplitude and phase given by integrals of instantaneous rates. Concretely, from (4.9)–(4.14):
 
-1. **Bounded, closed‑form radius.** The amplitude is the rational‑in‑$e^{-2\sigma_0 t}$ logistic (4.14); it neither decays to zero nor blows up for $\sigma_0>0$, but relaxes monotonically to $r_*$. This is exactly the behavior PWFO must reproduce over long horizons. The reported PWFO **amplitude flatness of $0.93$–$0.955$ with no decay or blow‑up**, sustained for $\sim40$ cycles in a single forward pass, is the empirical shadow of the constant $r_*$ built into (4.14): boundedness is guaranteed by the ansatz, not hoped for from training.
+1. **Bounded, closed‑form radius.** The amplitude is the rational‑in‑$e^{-2\sigma_0 t}$ logistic (4.14); it neither decays to zero nor blows up for $\sigma_0\gt 0$, but relaxes monotonically to $r_*$. This is exactly the behavior PWFO must reproduce over long horizons. The reported PWFO **amplitude flatness of $0.93$–$0.955$ with no decay or blow‑up**, sustained for $\sim40$ cycles in a single forward pass, is the empirical shadow of the constant $r_*$ built into (4.14): boundedness is guaranteed by the ansatz, not hoped for from training.
 
 2. **Periodic waveform in the phase.** On the attractor the state is $2\pi$‑periodic in $\theta=\Phi$, so it admits a Fourier expansion in the phase. This is *literally* the PWFO steady term
 $$
@@ -1209,11 +1213,11 @@ with $K$ harmonics ($K=20$ by default) correcting the pure circle (4.16) into th
 
 3. **Isostable transient = the transverse Floquet mode.** The deviation of $r$ from $r_*$ contracts at rate $-2\sigma_0$ (4.15). PWFO carries this as an isostable envelope
 $$
-\psi_j(t)=\rho_{0,j}\exp\!\Big(\int_0^t\kappa_j\big(u(\tau)\big)\,d\tau\Big),\qquad \kappa_j<0,
+\psi_j(t)=\rho_{0,j}\exp\!\Big(\int_0^t\kappa_j\big(u(\tau)\big)\,d\tau\Big),\qquad \kappa_j\lt 0,
 $$
 whose decay exponent $\kappa_j$ is the learned analogue of the transverse Floquet exponent $-2\sigma_0$. The initial condition $x_0$ enters *only* through the initial phase $\phi_0$ and the initial isostable amplitudes $\rho_{0,j}$ — precisely the two data $(\theta_0,\,r_0)$ that seed (4.10)–(4.14). Everything else is set by the current.
 
-4. **Phase warping = the integral $\int\omega$.** The phase is the quadrature $\Phi(t)=\phi_0+\int_0^t\omega\big(u(\tau)\big)\,d\tau$; PWFO computes it as a **prefix‑sum** of instantaneous rates $\omega_s=\omega_0+\mathrm{softplus}(\cdot)>0$ over the current grid, with linear interpolation on the last partial step — the discrete form of $\int_0^t\omega\,d\tau$. Likewise the envelope exponent is the prefix‑sum of $\kappa_{j,s}<0$. For a *time‑varying* current the constants $\sigma_0,\omega,\beta,c$ become slowly varying, and replacing them by instantaneous, current‑indexed rates is exactly the "**phase‑warping**" of the operator's name.
+4. **Phase warping = the integral $\int\omega$.** The phase is the quadrature $\Phi(t)=\phi_0+\int_0^t\omega\big(u(\tau)\big)\,d\tau$; PWFO computes it as a **prefix‑sum** of instantaneous rates $\omega_s=\omega_0+\mathrm{softplus}(\cdot)\gt 0$ over the current grid, with linear interpolation on the last partial step — the discrete form of $\int_0^t\omega\,d\tau$. Likewise the envelope exponent is the prefix‑sum of $\kappa_{j,s}\lt 0$. For a *time‑varying* current the constants $\sigma_0,\omega,\beta,c$ become slowly varying, and replacing them by instantaneous, current‑indexed rates is exactly the "**phase‑warping**" of the operator's name.
 
 The unifying point is structural, and it is why the fix works. In the Stuart–Landau representation, **time enters only through $\cos/\sin(k\Phi)$ (bounded, periodic) and through $e^{\int\kappa}$ (monotone decaying)** — never through an unrolled recursion. Since $\Phi$ and $\int\kappa$ are integrals that can be *precomputed once per profile* as prefix‑sums, the state at *any* query time is a gather‑and‑evaluate at $O(1)$ cost, with no time stepping. (This is the phenomenon behind the reported invariance of PWFO wall‑clock between $t\!\sim\!1$ and $t\!\sim\!10^6$: there is no hidden recursion to grow with $t$.) The exact solvability of the radial Bernoulli equation (4.9) is therefore not incidental — it is the theorem that licenses PWFO's ansatz. A phase‑plus‑isostable‑amplitude surrogate is faithful precisely because it *is* the closed‑form normal‑form solution (4.14), (4.16) of a supercritical Hopf oscillator, with the small‑amplitude circle upgraded, via the learned Fourier coefficients $A_k,B_k$ and $Cc_{jk},Cs_{jk}$, to the true FHN relaxation waveform.
 
@@ -1275,7 +1279,7 @@ Note that $J$ depends on the state only through $v$ (the fast variable); this is
 
 ### 5.2 The variational (linearised) equation
 
-**Ground truth.** Assume the autonomous system $\dot x=f(x,u)$ admits a non-constant periodic solution $\gamma(t)$ of minimal period $T>0$,
+**Ground truth.** Assume the autonomous system $\dot x=f(x,u)$ admits a non-constant periodic solution $\gamma(t)$ of minimal period $T\gt 0$,
 
 $$
 \dot\gamma(t)=f(\gamma(t),u),\qquad \gamma(t+T)=\gamma(t)\quad\forall t .
@@ -1356,7 +1360,7 @@ $$
 \tag{5.13}
 $$
 
-(The real part $\operatorname{Re}\kappa_i=\tfrac1T\log|\mu_i|$ is unambiguous; the imaginary part is defined modulo $2\pi/T$, corresponding to the freedom to add whole turns of phase per period.) A multiplier with $|\mu_i|<1$ has $\operatorname{Re}\kappa_i<0$ and represents an **attracting** (contracting) direction; $|\mu_i|>1$ would be repelling.
+(The real part $\operatorname{Re}\kappa_i=\tfrac1T\log|\mu_i|$ is unambiguous; the imaginary part is defined modulo $2\pi/T$, corresponding to the freedom to add whole turns of phase per period.) A multiplier with $|\mu_i|\lt 1$ has $\operatorname{Re}\kappa_i\lt 0$ and represents an **attracting** (contracting) direction; $|\mu_i|\gt 1$ would be repelling.
 
 **The trivial multiplier $\mu=1$, $\kappa=0$.** There is always one direction along which perturbations neither grow nor decay: the flow direction itself. To prove it, differentiate the defining identity $\dot\gamma(t)=f(\gamma(t),u)$ with respect to $t$ using the chain rule,
 
@@ -1398,10 +1402,10 @@ $$
 \tag{5.16}
 $$
 
-This is an **exact, closed formula** for the FHN transverse Floquet exponent, obtained purely from (5.4). It is negative—hence the cycle is attracting—whenever the orbit spends enough of its period at large $|v|$: on the excitable branches of the relaxation cycle $v(t)\approx\pm2$, so $1-v(t)^2\approx 1-4=-3<0$ dominates the small offset $b/\tau=0.8/12.5=0.064$, driving the time-average in (5.16) strongly negative. Thus
+This is an **exact, closed formula** for the FHN transverse Floquet exponent, obtained purely from (5.4). It is negative—hence the cycle is attracting—whenever the orbit spends enough of its period at large $|v|$: on the excitable branches of the relaxation cycle $v(t)\approx\pm2$, so $1-v(t)^2\approx 1-4=-3\lt 0$ dominates the small offset $b/\tau=0.8/12.5=0.064$, driving the time-average in (5.16) strongly negative. Thus
 
 $$
-\kappa_2<0\quad(|\mu_2|<1):\qquad\text{the FHN limit cycle is transversally attracting.}
+\kappa_2\lt 0\quad(|\mu_2|\lt 1):\qquad\text{the FHN limit cycle is transversally attracting.}
 \tag{5.17}
 $$
 
@@ -1413,9 +1417,9 @@ Floquet's theorem states that the fundamental matrix of a $T$-periodic linear sy
 
 > **Floquet's theorem.** There exist a (possibly complex) constant matrix $R\in\mathbb{C}^{2\times2}$ with $e^{RT}=M$, and a $T$-periodic, invertible matrix $P(t)$ with $P(0)=I$, such that
 > $$
-> \Psi(t)=P(t)\,e^{Rt},\qquad P(t+T)=P(t).
-> \tag{5.18}
-> $$
+\gt  \Psi(t)=P(t)\,e^{Rt},\qquad P(t+T)=P(t).
+\gt  \tag{5.18}
+\gt  $$
 
 *Proof.* Because $M$ is invertible (it is a state-transition matrix, so $\det M=\det\Psi(T)\neq0$ by (5.16)), it possesses a logarithm; choose $R:=\tfrac1T\log M$ so that $e^{RT}=M$, and define
 
@@ -1432,7 +1436,7 @@ $$
 
 Since $M=e^{RT}$ commutes with $e^{-Rt}$ (both are analytic functions of the single matrix $R$), $M e^{-Rt}M^{-1}=e^{-Rt}$, giving $P(t+T)=\Psi(t)e^{-Rt}=P(t)$. $\;\square$
 
-(Two standard caveats, stated for honesty: a *real* $R$ may fail to exist when a multiplier is negative, in which case one uses period $2T$; and $R$ is unique only up to the same $2\pi\mathrm{i}/T$ ambiguity as the exponents. The eigenvalues of $R$ are exactly the Floquet exponents $\kappa_1=0,\ \kappa_2<0$.)
+(Two standard caveats, stated for honesty: a *real* $R$ may fail to exist when a multiplier is negative, in which case one uses period $2T$; and $R$ is unique only up to the same $2\pi\mathrm{i}/T$ ambiguity as the exponents. The eigenvalues of $R$ are exactly the Floquet exponents $\kappa_1=0,\ \kappa_2\lt 0$.)
 
 **Floquet coordinates** rectify the variational flow into a constant-coefficient one. Introduce $y(t)$ by the periodic, time-dependent change of basis
 
@@ -1452,7 +1456,7 @@ In this frame the tangle of the $T$-periodic $J(\gamma(t))$ has been absorbed in
 
 ### 5.5 Isostable coordinates and the $\dot\psi_j=\kappa_j\psi_j$ law
 
-Diagonalise $R$ (assume, as holds generically and here, distinct eigenvalues, so that $R$ admits a complete biorthogonal eigenbasis). Let $\kappa_j$ be its nontrivial eigenvalues—here the single $\kappa_2<0$ of (5.16)—with right eigenvector $q_j$ (i.e. $Rq_j=\kappa_j q_j$) and left eigenvector $p_j^\top$ (i.e. $p_j^\top R=\kappa_j p_j^\top$), normalised so $p_j^\top q_j=1$. Define the **isostable coordinate** of a perturbation as its component along the $j$-th transverse Floquet eigendirection,
+Diagonalise $R$ (assume, as holds generically and here, distinct eigenvalues, so that $R$ admits a complete biorthogonal eigenbasis). Let $\kappa_j$ be its nontrivial eigenvalues—here the single $\kappa_2\lt 0$ of (5.16)—with right eigenvector $q_j$ (i.e. $Rq_j=\kappa_j q_j$) and left eigenvector $p_j^\top$ (i.e. $p_j^\top R=\kappa_j p_j^\top$), normalised so $p_j^\top q_j=1$. Define the **isostable coordinate** of a perturbation as its component along the $j$-th transverse Floquet eigendirection,
 
 $$
 \psi_j(t):=p_j^\top\,y(t)=p_j^\top P(t)^{-1}\delta(t).
@@ -1469,7 +1473,7 @@ $$
 The transverse component has been decoupled into a scalar, autonomous, linear ODE. Integrating (5.22) from $0$ to $t$,
 
 $$
-\boxed{\;\psi_j(t)=\psi_j(0)\,e^{\kappa_j t},\qquad \kappa_j<0\;}
+\boxed{\;\psi_j(t)=\psi_j(0)\,e^{\kappa_j t},\qquad \kappa_j\lt 0\;}
 \tag{5.23}
 $$
 
@@ -1530,7 +1534,7 @@ $$
 
 which is **exactly** the PWFO output (5.1), with the identification $\psi_j(0)=\rho_{0,j}$. The first-order truncation is the sole modelling approximation: it neglects the quadratic isostable terms $O(\psi_j\psi_l)$ and is therefore rigorously valid *near* the cycle, i.e. for small transient amplitude—consistent with the empirical observation that the surrogate's transient decays and the long-time state collapses onto the amplitude-flat cycle (measured flatness $0.93$–$0.955$ far/early, no decay or blow-up).
 
-**Step 3 — adiabatic extension to time-varying current.** For $u=u(t)$ the system is no longer autonomous and Floquet theory does not apply verbatim. The surrogate makes the **frozen-coefficient (adiabatic) assumption**: at each instant it uses the Floquet data of the *momentarily constant* current $u_s$, promoting the constant exponents/frequency to instantaneous, current-dependent rates $\kappa_j(u_s)<0$ and $\omega(u_s)>0$, and replacing the exact integrals of §5.5 by their accumulated (prefix-sum) forms
+**Step 3 — adiabatic extension to time-varying current.** For $u=u(t)$ the system is no longer autonomous and Floquet theory does not apply verbatim. The surrogate makes the **frozen-coefficient (adiabatic) assumption**: at each instant it uses the Floquet data of the *momentarily constant* current $u_s$, promoting the constant exponents/frequency to instantaneous, current-dependent rates $\kappa_j(u_s)\lt 0$ and $\omega(u_s)\gt 0$, and replacing the exact integrals of §5.5 by their accumulated (prefix-sum) forms
 
 $$
 \psi_j(t)=\rho_{0,j}\exp\!\Big(\int_0^t\kappa_j\big(u(\tau)\big)\,d\tau\Big),
@@ -1539,9 +1543,9 @@ $$
 \tag{5.29}
 $$
 
-For constant $u$ these reduce exactly to (5.23) and $\Phi=\phi_0+\omega_0 t$; for slowly varying $u$ they are the natural first-order (WKB/averaging) generalisation, and time enters (5.28) **only** through the bounded periodic factors $\cos/\sin(k\Phi)$ and the monotonically decaying envelopes $e^{\int\kappa_j}$ (recall $\kappa_j<0$, so the exponent is nonincreasing along any $u(\cdot)$). This is exactly why any query time can be evaluated as an $O(1)$ gather over precomputed prefix sums with no recursion, and why amplitude is structurally preserved at arbitrarily large $t$ while error manifests as accumulated *phase* offset (the reported far-time NRMSE $0.39$ vs. early $0.225$ arising from drift in $\Phi$, not from envelope failure). The approximation is best when the isostable structure is quasi-stationary—accounting for the strong performance on slow forcing (const/step/ramp one-shot NRMSE $0.19$/$0.37$/$0.41$) and the degradation on fast forcing (pulse/chirp/sines $0.72$/$0.77$/$0.77$), where the frozen-coefficient assumption underlying (5.29) is least accurate.
+For constant $u$ these reduce exactly to (5.23) and $\Phi=\phi_0+\omega_0 t$; for slowly varying $u$ they are the natural first-order (WKB/averaging) generalisation, and time enters (5.28) **only** through the bounded periodic factors $\cos/\sin(k\Phi)$ and the monotonically decaying envelopes $e^{\int\kappa_j}$ (recall $\kappa_j\lt 0$, so the exponent is nonincreasing along any $u(\cdot)$). This is exactly why any query time can be evaluated as an $O(1)$ gather over precomputed prefix sums with no recursion, and why amplitude is structurally preserved at arbitrarily large $t$ while error manifests as accumulated *phase* offset (the reported far-time NRMSE $0.39$ vs. early $0.225$ arising from drift in $\Phi$, not from envelope failure). The approximation is best when the isostable structure is quasi-stationary—accounting for the strong performance on slow forcing (const/step/ramp one-shot NRMSE $0.19$/$0.37$/$0.41$) and the degradation on fast forcing (pulse/chirp/sines $0.72$/$0.77$/$0.77$), where the frozen-coefficient assumption underlying (5.29) is least accurate.
 
-**Summary.** Floquet theory supplies (i) the neutral tangential direction $\kappa_1=0$ that becomes the phase $\Phi$, and (ii) the attracting transverse direction $\kappa_2<0$ of (5.16)–(5.17) that becomes the isostable coordinate $\psi$. Isostable coordinates upgrade the latter to a Koopman eigenfunction obeying the exact law $\dot\psi_j=\kappa_j\psi_j$, hence $\psi_j(t)=\rho_{0,j}e^{\kappa_j t}$. A first-order expansion of the state in these coordinates—cycle plus (decaying amplitude)$\times$(phase-periodic mode shape)—is *identically* the PWFO representation (5.1). Every symbol in the surrogate's transient term is thereby a named object of the underlying dynamical geometry: $\kappa_j$ the Floquet exponent, $\psi_j$ the isostable amplitude, $\Phi$ the asymptotic phase, and the Fourier harmonics the phase-space mode shapes.
+**Summary.** Floquet theory supplies (i) the neutral tangential direction $\kappa_1=0$ that becomes the phase $\Phi$, and (ii) the attracting transverse direction $\kappa_2\lt 0$ of (5.16)–(5.17) that becomes the isostable coordinate $\psi$. Isostable coordinates upgrade the latter to a Koopman eigenfunction obeying the exact law $\dot\psi_j=\kappa_j\psi_j$, hence $\psi_j(t)=\rho_{0,j}e^{\kappa_j t}$. A first-order expansion of the state in these coordinates—cycle plus (decaying amplitude)$\times$(phase-periodic mode shape)—is *identically* the PWFO representation (5.1). Every symbol in the surrogate's transient term is thereby a named object of the underlying dynamical geometry: $\kappa_j$ the Floquet exponent, $\psi_j$ the isostable amplitude, $\Phi$ the asymptotic phase, and the Fourier harmonics the phase-space mode shapes.
 
 ## 6. Phase reduction, isochrons, and the adiabatic phase law
 
@@ -1566,7 +1570,7 @@ $$
 with $a=0.7,\ b=0.8,\ \tau=12.5$. For a *fixed* control value $u$ in the firing band ($u\in[0.33,1.42]$), (6.2) is an autonomous planar system possessing a hyperbolic, exponentially stable limit cycle $\Gamma(u)\subset\mathbb{R}^2$ of period $T(u)$ (empirically $T\approx 37$, so $\omega\approx 2\pi/37\approx 0.17$) and peak-to-peak $v$-amplitude $\approx 3.8$. Denote its natural (angular) frequency
 
 $$
-\omega(u)\;:=\;\frac{2\pi}{T(u)}\;>\;0 .
+\omega(u)\;:=\;\frac{2\pi}{T(u)}\;\gt \;0 .
 $$
 
 Let $\gamma_u:\mathbb{R}\to\Gamma(u)$ be a $T(u)$-periodic solution, $\dot\gamma_u=f(\gamma_u,u)$, $\gamma_u(t+T)=\gamma_u(t)$, and let $\mathcal B(u)\subset\mathbb{R}^2$ be its basin of attraction. We first develop parts (a)–(b) at frozen $u$, dropping the argument, and reinstate it in (c).
@@ -1624,10 +1628,10 @@ $$
 Differentiating the cycle identity $\dot\gamma=f(\gamma)$ in $t$ gives $\ddot\gamma=D_xf(\gamma)\dot\gamma=J(t)\dot\gamma$, so $\dot\gamma(t)$ is a $T$-periodic solution of the variational equation (6.7); by Floquet's theorem it corresponds to a multiplier $1$ (the neutral, *phase* direction). The remaining transverse multiplier is $e^{\kappa T}$ with the Floquet exponent
 
 $$
-\kappa \;<\;0
+\kappa \;\lt \;0
 $$
 
-(the isostable decay rate — this is exactly the $\kappa_j$ that PWFO parametrizes as $\kappa_s=-\mathrm{softplus}(\cdot)<0$). Because the two Floquet directions are transverse and one is neutral while the other contracts, there is a smooth change of coordinates $x\mapsto(\Phi,\psi)$ in a tubular neighborhood of $\Gamma$ — phase $\Phi\in S^1$ and *isostable amplitude* $\psi$ — in which the flow is exactly linear-diagonal (Wilson–Moehlis phase–isostable normal form):
+(the isostable decay rate — this is exactly the $\kappa_j$ that PWFO parametrizes as $\kappa_s=-\mathrm{softplus}(\cdot)\lt 0$). Because the two Floquet directions are transverse and one is neutral while the other contracts, there is a smooth change of coordinates $x\mapsto(\Phi,\psi)$ in a tubular neighborhood of $\Gamma$ — phase $\Phi\in S^1$ and *isostable amplitude* $\psi$ — in which the flow is exactly linear-diagonal (Wilson–Moehlis phase–isostable normal form):
 
 $$
 \dot\Phi=\omega,\qquad \dot\psi=\kappa\,\psi .
@@ -1777,14 +1781,14 @@ $$
 with a bounded $O(\varepsilon)$ remainder over each $O(1/\varepsilon)$ span of fast periods; any residual, un-absorbed mean shift appears as the slow secular phase drift analyzed in §6.4. Equation (6.20) is precisely (6.1). Discretizing on the PWFO grid $t_i=i\,dt$, with $s=\lfloor t/dt\rfloor$ and $\mathrm{frac}=t-s\,dt$,
 
 $$
-\Phi(t)\approx\phi_0+dt\sum_{i<s}\omega(u_i)+\omega(u_s)\,\mathrm{frac},
+\Phi(t)\approx\phi_0+dt\sum_{i\lt s}\omega(u_i)+\omega(u_s)\,\mathrm{frac},
 \tag{6.21}
 $$
 
-term-for-term identical to PWFO's prefix-sum with $\omega_s=\omega_0+\mathrm{softplus}(\mathrm{MLP}([u_s,c]))>0$. The same argument applied to the isostable equation $\dot\psi=\kappa(u)\psi$ integrates to
+term-for-term identical to PWFO's prefix-sum with $\omega_s=\omega_0+\mathrm{softplus}(\mathrm{MLP}([u_s,c]))\gt 0$. The same argument applied to the isostable equation $\dot\psi=\kappa(u)\psi$ integrates to
 
 $$
-\psi_j(t)=\rho_{0,j}\,\exp\!\int_0^t\kappa_j\big(u(\tau)\big)\,d\tau,\qquad \kappa_j<0,
+\psi_j(t)=\rho_{0,j}\,\exp\!\int_0^t\kappa_j\big(u(\tau)\big)\,d\tau,\qquad \kappa_j\lt 0,
 \tag{6.22}
 $$
 
@@ -1848,7 +1852,7 @@ In short, the recurrent flow-map stepper of Model Definition 2 succeeds in exact
 
 ## 7. Assembling PWFO: Fourier-in-phase representation and the one-shot property
 
-Sections 4–6 gave us three separate objects. From §4 we have the **asymptotic phase** $\Phi(t)\in\mathbb{S}^1$, an angle that advances at the instantaneous rate $\omega(u)$ so that on the unperturbed cycle $\dot\Phi=\omega$ is constant. From §5 we have the **isostable coordinates** $\psi_j(t)$, transverse-to-cycle amplitudes that contract at the Floquet exponents $\kappa_j<0$. From §6 we have the geometry of the attracting limit cycle $\Gamma_u\subset\mathbb{R}^2$ itself, a closed invariant curve. This section fuses them into a single closed-form expression for the state $x(t)=(v(t),w(t))$ — the **Phase-Warped Floquet Operator (PWFO)** ansatz — and then analyzes what that expression can and cannot represent, and why it evaluates in constant time.
+Sections 4–6 gave us three separate objects. From §4 we have the **asymptotic phase** $\Phi(t)\in\mathbb{S}^1$, an angle that advances at the instantaneous rate $\omega(u)$ so that on the unperturbed cycle $\dot\Phi=\omega$ is constant. From §5 we have the **isostable coordinates** $\psi_j(t)$, transverse-to-cycle amplitudes that contract at the Floquet exponents $\kappa_j\lt 0$. From §6 we have the geometry of the attracting limit cycle $\Gamma_u\subset\mathbb{R}^2$ itself, a closed invariant curve. This section fuses them into a single closed-form expression for the state $x(t)=(v(t),w(t))$ — the **Phase-Warped Floquet Operator (PWFO)** ansatz — and then analyzes what that expression can and cannot represent, and why it evaluates in constant time.
 
 Throughout, $x=(v,w)\in\mathbb{R}^2$ is the state, $u=I_{\text{ext}}$ the control, $f(x,u)$ the FHN vector field of the ground-truth ODE, and $\Gamma_u$ the (assumed unique, hyperbolic) attracting limit cycle for a fixed current $u$ in the firing band $u\in[0.33,1.42]$. Its period is $T=2\pi/\omega$ with $\omega\approx 0.17$, i.e. $T\approx 37$.
 
@@ -1868,7 +1872,7 @@ $$
 f(x,u)=\begin{pmatrix} v-\tfrac{v^3}{3}-w+u\\[2pt] (v+a-bw)/\tau\end{pmatrix},\qquad a=0.7,\ b=0.8,\ \tau=12.5,
 $$
 
-is a **polynomial** in $(v,w)$, hence $C^\infty$ and in fact real-analytic. By the classical analyticity theorem for ODEs with real-analytic right-hand side (the analytic Cauchy existence theorem — note this is the ODE statement, *not* Cauchy–Kovalevskaya, which concerns PDEs), every solution, and in particular the periodic orbit, is a real-analytic function of time. Because $\Phi=\omega t+\phi_0$ is an affine (hence analytic) reparametrization on the cycle, $X$ is real-analytic in $\Phi$: it extends to a holomorphic function on a complex strip $|\,\mathrm{Im}\,\Phi\,|<\eta$ of some width $\eta>0$. Second, $X$ is $2\pi$-periodic. A real-analytic $2\pi$-periodic function is exactly the setting in which the classical Fourier theorem applies with the strongest possible conclusion.
+is a **polynomial** in $(v,w)$, hence $C^\infty$ and in fact real-analytic. By the classical analyticity theorem for ODEs with real-analytic right-hand side (the analytic Cauchy existence theorem — note this is the ODE statement, *not* Cauchy–Kovalevskaya, which concerns PDEs), every solution, and in particular the periodic orbit, is a real-analytic function of time. Because $\Phi=\omega t+\phi_0$ is an affine (hence analytic) reparametrization on the cycle, $X$ is real-analytic in $\Phi$: it extends to a holomorphic function on a complex strip $|\,\mathrm{Im}\,\Phi\,|\lt \eta$ of some width $\eta\gt 0$. Second, $X$ is $2\pi$-periodic. A real-analytic $2\pi$-periodic function is exactly the setting in which the classical Fourier theorem applies with the strongest possible conclusion.
 
 **The Fourier expansion.** By the Fourier theorem, every square-integrable $2\pi$-periodic function admits the $L^2$-convergent expansion (applied componentwise to $v$ and $w$; all coefficients are vectors in $\mathbb{R}^2$)
 
@@ -1897,10 +1901,10 @@ $$
 |A_k|,\,|B_k|\;\le\;\frac{1}{\pi\,k^{p}}\int_0^{2\pi}\big|X^{(p)}(\Phi)\big|\,d\Phi\;=\;O\!\big(k^{-p}\big). \tag{7.5}
 $$
 
-Since $X\in C^\infty$ this holds for **every** $p$: the coefficients decay **faster than any polynomial**. Because $X$ is moreover real-analytic in the strip $|\mathrm{Im}\,\Phi|<\eta$, shifting the contour of the defining integral (7.3) into the strip (permissible by Cauchy's theorem, $X$ being holomorphic and $2\pi$-periodic there) gives the sharper geometric bound
+Since $X\in C^\infty$ this holds for **every** $p$: the coefficients decay **faster than any polynomial**. Because $X$ is moreover real-analytic in the strip $|\mathrm{Im}\,\Phi|\lt \eta$, shifting the contour of the defining integral (7.3) into the strip (permissible by Cauchy's theorem, $X$ being holomorphic and $2\pi$-periodic there) gives the sharper geometric bound
 
 $$
-|A_k|,\,|B_k|\;\le\;M\,e^{-\eta k}\;=\;M\,\rho^{-k},\qquad \rho=e^{\eta}>1, \tag{7.6}
+|A_k|,\,|B_k|\;\le\;M\,e^{-\eta k}\;=\;M\,\rho^{-k},\qquad \rho=e^{\eta}\gt 1, \tag{7.6}
 $$
 
 for a constant $M$ depending on $\sup$ of $|X|$ on the shifted contour.
@@ -1908,10 +1912,10 @@ for a constant $M$ depending on $\sup$ of $|X|$ on the shifted contour.
 **Truncation error at $K$ harmonics.** Let $X_K=\mu+\sum_{k=1}^K[A_k\cos k\Phi+B_k\sin k\Phi]$ be the retained model. Using orthogonality on $[0,2\pi]$ — $\int_0^{2\pi}\cos^2 k\Phi\,d\Phi=\int_0^{2\pi}\sin^2 k\Phi\,d\Phi=\pi$ — Parseval's identity gives the mean-square truncation error as the coefficient tail,
 
 $$
-\|X-X_K\|_{L^2}^2=\pi\sum_{k>K}\big(|A_k|^2+|B_k|^2\big). \tag{7.7}
+\|X-X_K\|_{L^2}^2=\pi\sum_{k\gt K}\big(|A_k|^2+|B_k|^2\big). \tag{7.7}
 $$
 
-Substituting the analytic bound (7.6), and using $|A_k|^2+|B_k|^2\le 2M^2 e^{-2\eta k}$ together with the geometric sum $\sum_{k>K}e^{-2\eta k}=\dfrac{e^{-2\eta(K+1)}}{1-e^{-2\eta}}$, gives geometric convergence,
+Substituting the analytic bound (7.6), and using $|A_k|^2+|B_k|^2\le 2M^2 e^{-2\eta k}$ together with the geometric sum $\sum_{k\gt K}e^{-2\eta k}=\dfrac{e^{-2\eta(K+1)}}{1-e^{-2\eta}}$, gives geometric convergence,
 
 $$
 \|X-X_K\|_{L^2}^2\;\le\;\frac{2\pi M^2\,e^{-2\eta(K+1)}}{1-e^{-2\eta}}\;=\;O\!\big(\rho^{-2K}\big), \tag{7.8}
@@ -1919,7 +1923,7 @@ $$
 
 so for a *smooth, gently varying* cycle a modest $K$ already gives exponentially small error.
 
-**Why a sharp relaxation spike needs a large $K$.** FHN is a **relaxation oscillator** ($\tau=12.5$ enforces slow $w$, fast $v$). The trajectory spends most of the period creeping along the slow branches of the cubic $v$-nullcline and then executes a **fast jump** in $v$ (peak-to-peak amplitude $\approx 3.8$) over a tiny fraction of the period. In the phase coordinate this fast jump is compressed into a short phase interval of width $\varepsilon\ll 2\pi$, across which $X'(\Phi)$ is huge — the waveform is *near-discontinuous*. Analytically, the complex singularity of $X(\Phi)$ that produces the near-jump sits close to the real axis, so the analyticity half-width shrinks, $\eta\to 0^+$, and the geometric rate $\rho=e^\eta\to 1^+$: the exponential convergence (7.8) degrades toward the algebraic rate of a near-step function, whose coefficients decay only like $|A_k|\sim 1/k$. Two consequences follow. (i) The Parseval tail (7.7) becomes $\sum_{k>K}k^{-2}\sim K^{-1}$, so RMS error decays only as $K^{-1/2}$. (ii) Near the front the partial sum exhibits the **Gibbs phenomenon**: a fixed $\sim 9\%$ overshoot (the Wilbraham–Gibbs constant, $\approx 8.95\%$ of the jump) that does *not* shrink with $K$ but merely narrows toward the jump. Since harmonic $k$ has phase-wavelength $2\pi/k$, resolving a front of phase-width $\varepsilon$ requires wavelength $2\pi/K\lesssim\varepsilon$, i.e.
+**Why a sharp relaxation spike needs a large $K$.** FHN is a **relaxation oscillator** ($\tau=12.5$ enforces slow $w$, fast $v$). The trajectory spends most of the period creeping along the slow branches of the cubic $v$-nullcline and then executes a **fast jump** in $v$ (peak-to-peak amplitude $\approx 3.8$) over a tiny fraction of the period. In the phase coordinate this fast jump is compressed into a short phase interval of width $\varepsilon\ll 2\pi$, across which $X'(\Phi)$ is huge — the waveform is *near-discontinuous*. Analytically, the complex singularity of $X(\Phi)$ that produces the near-jump sits close to the real axis, so the analyticity half-width shrinks, $\eta\to 0^+$, and the geometric rate $\rho=e^\eta\to 1^+$: the exponential convergence (7.8) degrades toward the algebraic rate of a near-step function, whose coefficients decay only like $|A_k|\sim 1/k$. Two consequences follow. (i) The Parseval tail (7.7) becomes $\sum_{k\gt K}k^{-2}\sim K^{-1}$, so RMS error decays only as $K^{-1/2}$. (ii) Near the front the partial sum exhibits the **Gibbs phenomenon**: a fixed $\sim 9\%$ overshoot (the Wilbraham–Gibbs constant, $\approx 8.95\%$ of the jump) that does *not* shrink with $K$ but merely narrows toward the jump. Since harmonic $k$ has phase-wavelength $2\pi/k$, resolving a front of phase-width $\varepsilon$ requires wavelength $2\pi/K\lesssim\varepsilon$, i.e.
 
 $$
 K\;\gtrsim\;\frac{2\pi}{\varepsilon}\qquad(\text{harmonics up to the front scale}). \tag{7.9}
@@ -1931,7 +1935,7 @@ $$
 
 ### 7.2 (b) Adding the isostable transient
 
-Off the cycle, §5's Floquet theory says a nearby trajectory relaxes onto $\Gamma_u$ along eigenmodes whose *shape* is $2\pi$-periodic in phase and whose *amplitude* contracts at rate $\kappa_j<0$. In phase–isostable coordinates the state decomposes, to first order in the transverse deviation, as
+Off the cycle, §5's Floquet theory says a nearby trajectory relaxes onto $\Gamma_u$ along eigenmodes whose *shape* is $2\pi$-periodic in phase and whose *amplitude* contracts at rate $\kappa_j\lt 0$. In phase–isostable coordinates the state decomposes, to first order in the transverse deviation, as
 
 $$
 x(t)=X\big(\Phi(t)\big)+\sum_{j=1}^{m}\psi_j(t)\,X_j\big(\Phi(t)\big)+\text{(higher-order)}, \tag{7.10}
@@ -1946,7 +1950,7 @@ $$
 so each isostable mode carries its **own Fourier image**. The amplitude is the envelope produced in §5,
 
 $$
-\psi_j(t)=\rho_{0,j}\,\exp\!\Big(\textstyle\int_0^t\kappa_j(u(\tau))\,d\tau\Big),\qquad \kappa_j<0\ \Rightarrow\ \psi_j\ \text{decays}. \tag{7.12}
+\psi_j(t)=\rho_{0,j}\,\exp\!\Big(\textstyle\int_0^t\kappa_j(u(\tau))\,d\tau\Big),\qquad \kappa_j\lt 0\ \Rightarrow\ \psi_j\ \text{decays}. \tag{7.12}
 $$
 
 Assembling (7.2), (7.11), (7.12) gives the **full PWFO output**
@@ -2004,7 +2008,7 @@ $$
 x(t)\;=\;X\big(\Phi(t);\,u(t)\big)\;+\;O\!\Big(\frac{|\partial_u X|\,|\dot u|}{|\kappa|}\Big). \tag{7.17}
 $$
 
-To leading order the waveform is that of the *frozen* cycle $\Gamma_{u(t)}$, evaluated at the accumulated phase. Frequency drift is already captured because the phase rate is conditioned on the current, $\omega_s=\omega_0+\mathrm{softplus}(\cdot)>0$, integrated by the prefix sum $\Phi(t)=\phi_0+\int_0^t\omega(u(\tau))\,d\tau$; amplitude and shape drift are captured by (7.16). The context vector $c=\mathrm{MLP}[\,\overline u,\,\mathrm{std}\,u,\min u,\max u,u_0,u_{-1}]$ supplies the *global* operating regime, while $u_s$ pins the *instantaneous* operating point — together they identify the correct member of $\{\Gamma_u\}$ at each query.
+To leading order the waveform is that of the *frozen* cycle $\Gamma_{u(t)}$, evaluated at the accumulated phase. Frequency drift is already captured because the phase rate is conditioned on the current, $\omega_s=\omega_0+\mathrm{softplus}(\cdot)\gt 0$, integrated by the prefix sum $\Phi(t)=\phi_0+\int_0^t\omega(u(\tau))\,d\tau$; amplitude and shape drift are captured by (7.16). The context vector $c=\mathrm{MLP}[\,\overline u,\,\mathrm{std}\,u,\min u,\max u,u_0,u_{-1}]$ supplies the *global* operating regime, while $u_s$ pins the *instantaneous* operating point — together they identify the correct member of $\{\Gamma_u\}$ at each query.
 
 **Region of validity.** The expansion (7.17) is controlled by $|\dot u|/|\kappa|$, so conditioning on $u_s$ is accurate precisely when the drive is quasi-static. This is exactly what the numerics show: slowly varying profiles are well captured (anchored 3-cycle one-shot NRMSE $0.19$ const, $0.37$ step, $0.41$ ramp), whereas fast profiles that violate adiabaticity degrade sharply ($0.72$ pulse, $0.77$ chirp, $0.77$ sines). The failure is not a defect of the Fourier representation but the breakdown of the quasi-static assumption: when $|\dot u|$ is large the true state carries memory that a frozen-cycle-plus-decaying-transient ansatz omits.
 
@@ -2018,7 +2022,7 @@ We now show that, unlike any time-stepper, evaluating (7.13) at a query time $t$
 $\omega_i=\omega_0+\mathrm{softplus}(\mathrm{MLP}[u_i,c])$ and $\kappa_{j,i}=-\mathrm{softplus}(\mathrm{MLP}[u_i,c])$ for $i=0,\dots,S-1$ — an $O(S)$ pass. Then form the **prefix sums** (discrete integrals)
 
 $$
-P_s=\sum_{i<s}\omega_i,\qquad Q_{j,s}=\sum_{i<s}\kappa_{j,i},\qquad s=0,\dots,S, \tag{7.18}
+P_s=\sum_{i\lt s}\omega_i,\qquad Q_{j,s}=\sum_{i\lt s}\kappa_{j,i},\qquad s=0,\dots,S, \tag{7.18}
 $$
 
 each computable in a single $O(S)$ scan (or $O(\log S)$ parallel depth). Store the arrays $\{P_s\},\{Q_{j,s}\}$ once. Multiplied by $dt$ these are the left-Riemann-sum approximations of $\int_0^{s\,dt}\omega\,d\tau$ and $\int_0^{s\,dt}\kappa_j\,d\tau$.
@@ -2165,7 +2169,7 @@ $$
 \tag{8.11}
 $$
 
-is **compact**, and $g^{\star}$ is continuous on $\mathcal{R}$ (it is an integral of the smooth field over a fixed window). The universal approximation theorem (Cybenko/Hornik) then guarantees: for every tolerance $\epsilon>0$ there exists a finite-width MLP $g_{\theta}$ with
+is **compact**, and $g^{\star}$ is continuous on $\mathcal{R}$ (it is an integral of the smooth field over a fixed window). The universal approximation theorem (Cybenko/Hornik) then guarantees: for every tolerance $\epsilon\gt 0$ there exists a finite-width MLP $g_{\theta}$ with
 
 $$
 \sup_{(x,u_{t},u_{t+\Delta})\in\mathcal{R}}\big\|g_{\theta}(x,u_{t},u_{t+\Delta})-g^{\star}(x,u_{t},u_{t+\Delta})\big\|\le\epsilon.
@@ -2220,7 +2224,7 @@ $$
 
 This is the **discrete Grönwall recursion**: each step expands the inherited error by the factor $1+L\Delta$ and adds a fresh $\epsilon$.
 
-**Solving the recursion.** Write $\rho:=1+L\Delta>1$. Unrolling (8.17) from $e_{0}=0$ gives $e_1\le\epsilon$, $e_2\le\rho\epsilon+\epsilon$, and in general
+**Solving the recursion.** Write $\rho:=1+L\Delta\gt 1$. Unrolling (8.17) from $e_{0}=0$ gives $e_1\le\epsilon$, $e_2\le\rho\epsilon+\epsilon$, and in general
 
 $$
 e_{N}\le \epsilon\big(\rho^{N-1}+\rho^{N-2}+\cdots+\rho+1\big)
@@ -2249,7 +2253,7 @@ Three lessons follow.
 
 - **What actually controls the constant.** The prefactor is $\epsilon/(L\Delta)=(\epsilon/\Delta)/L$, i.e. the *local error density* $\epsilon/\Delta$ (error injected per unit time) divided by $L$. Because $\epsilon$ here is a *trained floor* that does **not** shrink with $\Delta$ (unlike a $p$-th order method where $\epsilon=O(\Delta^{p+1})$), the way to make rollouts accurate is to drive $\epsilon$ down *and* to keep the effective $L$ small.
 
-- **Why the FHN numbers look the way they do, and why BPTT.** The bound uses a global Lipschitz $L$, but on the attracting limit cycle the *transverse* directions contract: the isostable/Floquet exponents $\kappa_{j}<0$ mean errors off the cycle decay, and only the neutral *phase* direction (marginally stable, exponent $\approx 0$) accumulates — linearly, not exponentially. This is why the constant-current rollout NRMSE is tiny ($0.019$) while ramp/sines, which keep pushing the state off any single cycle, are larger ($0.234$, $0.110$). Most importantly, (8.18) is a bound on the *multi-step* quantity $e_{N}$, whereas naive training only minimizes the *one-step* $\epsilon$. The multi-step BPTT curriculum — rollout horizon grown $8\to32\to128\to560$ coarse steps, gradient-checkpointed — directly minimizes $e_{N}$ at increasing $N$, i.e. it optimizes the *amplified* left-hand side of (8.18) rather than merely its input $\epsilon$. The curriculum is precisely the training-time countermeasure to Grönwall amplification.
+- **Why the FHN numbers look the way they do, and why BPTT.** The bound uses a global Lipschitz $L$, but on the attracting limit cycle the *transverse* directions contract: the isostable/Floquet exponents $\kappa_{j}\lt 0$ mean errors off the cycle decay, and only the neutral *phase* direction (marginally stable, exponent $\approx 0$) accumulates — linearly, not exponentially. This is why the constant-current rollout NRMSE is tiny ($0.019$) while ramp/sines, which keep pushing the state off any single cycle, are larger ($0.234$, $0.110$). Most importantly, (8.18) is a bound on the *multi-step* quantity $e_{N}$, whereas naive training only minimizes the *one-step* $\epsilon$. The multi-step BPTT curriculum — rollout horizon grown $8\to32\to128\to560$ coarse steps, gradient-checkpointed — directly minimizes $e_{N}$ at increasing $N$, i.e. it optimizes the *amplified* left-hand side of (8.18) rather than merely its input $\epsilon$. The curriculum is precisely the training-time countermeasure to Grönwall amplification.
 
 ### 8d. Why a coarse learned step beats a fine explicit solver on stiff neurons
 
@@ -2321,7 +2325,7 @@ $$
 \tag{9.1}
 $$
 
-with fixed positive scalar weights $w_{\text{freq}},w_{\text{range}}>0$. Each term addresses a *distinct* failure mode of the naive "just fit the state" objective. We take them in turn.
+with fixed positive scalar weights $w_{\text{freq}},w_{\text{range}}\gt 0$. Each term addresses a *distinct* failure mode of the naive "just fit the state" objective. We take them in turn.
 
 #### (i) $\mathcal{L}_{\text{state}}$: z-scored, peak-weighted state error
 
@@ -2358,7 +2362,7 @@ $$
 
 #### (ii) $\mathcal{L}_{\text{freq}}$: supervised frequency, and why it is *not optional*
 
-Let $\omega_{\text{meas}}(u)=2\pi/T(u)$ be the measured limit-cycle angular frequency at constant current $u$. From the axioms, inside the firing band $T\approx 37$, so $\omega_{\text{meas}}\approx 2\pi/37\approx 0.17$; this is tabulated by direct simulation for $u$ in the firing band $\mathcal{U}_{\text{fire}}=[0.33,1.42]$. The PWFO's instantaneous-rate head $\omega(u)=\omega_0+\text{softplus}(\cdot)>0$ (Model Definition 1) is supervised against it:
+Let $\omega_{\text{meas}}(u)=2\pi/T(u)$ be the measured limit-cycle angular frequency at constant current $u$. From the axioms, inside the firing band $T\approx 37$, so $\omega_{\text{meas}}\approx 2\pi/37\approx 0.17$; this is tabulated by direct simulation for $u$ in the firing band $\mathcal{U}_{\text{fire}}=[0.33,1.42]$. The PWFO's instantaneous-rate head $\omega(u)=\omega_0+\text{softplus}(\cdot)\gt 0$ (Model Definition 1) is supervised against it:
 
 $$
 \mathcal{L}_{\text{freq}}
@@ -2474,7 +2478,7 @@ C(H)=\sum_{n=0}^{H-1}L_g^{\,n}=
 \tag{9.12}
 $$
 
-where the closed form is the finite geometric sum $\sum_{n=0}^{H-1}L_g^{\,n}$ (and its $L_g\to1$ limit $H$). Thus $C(H)$ grows geometrically when the step expands ($L_g>1$) and only linearly when it is neutral/contracting ($L_g\le1$). The natural objective that *directly* controls $E_H$ is the **$H$-step rollout loss**
+where the closed form is the finite geometric sum $\sum_{n=0}^{H-1}L_g^{\,n}$ (and its $L_g\to1$ limit $H$). Thus $C(H)$ grows geometrically when the step expands ($L_g\gt 1$) and only linearly when it is neutral/contracting ($L_g\le1$). The natural objective that *directly* controls $E_H$ is the **$H$-step rollout loss**
 
 $$
 \mathcal{L}^{(H)}_{\text{roll}}(\theta)
@@ -2485,7 +2489,7 @@ $$
 
 whose gradient flows through the *composed* recurrence, so it penalizes not the one-step error in isolation but the error the model makes *on its own drifted rollout state* — exactly the $\varepsilon_{\text{step}}$ appearing in (9.12), evaluated along realistic trajectories, together with an implicit pressure to keep $L_g$ from amplifying.
 
-**Why grow $H$.** Optimizing (9.13) at large $H$ from scratch is ill-conditioned: BPTT gradients through $H$ compositions scale like $\prod L_g\sim L_g^{\,H}$, so for $L_g>1$ they explode (and for $L_g<1$ vanish), producing high-variance, stiff updates. Short horizons, by contrast, give a well-conditioned, near-convex objective with informative gradients. The curriculum
+**Why grow $H$.** Optimizing (9.13) at large $H$ from scratch is ill-conditioned: BPTT gradients through $H$ compositions scale like $\prod L_g\sim L_g^{\,H}$, so for $L_g\gt 1$ they explode (and for $L_g\lt 1$ vanish), producing high-variance, stiff updates. Short horizons, by contrast, give a well-conditioned, near-convex objective with informative gradients. The curriculum
 
 $$
 H:\; 8\;\to\;32\;\to\;128\;\to\;560\quad(\text{coarse steps})
@@ -2519,15 +2523,15 @@ $$
 \boxed{\;
 \text{route}(t,\beta)=
 \begin{cases}
-\textbf{flow map (recurrent)}, & t\le T_{\max}\ \ \text{(finite horizon)}\quad\textbf{or}\quad \beta>\beta^\star\ \ \text{(fast forcing)},\\[4pt]
-\textbf{PWFO (one-shot }O(1)\textbf{)}, & t> T_{\max}\ \ \text{(very-far / unbounded }t)\quad\textbf{and}\quad \beta\le\beta^\star\ \ \text{(slow forcing)}.
+\textbf{flow map (recurrent)}, & t\le T_{\max}\ \ \text{(finite horizon)}\quad\textbf{or}\quad \beta\gt \beta^\star\ \ \text{(fast forcing)},\\[4pt]
+\textbf{PWFO (one-shot }O(1)\textbf{)}, & t\gt  T_{\max}\ \ \text{(very-far / unbounded }t)\quad\textbf{and}\quad \beta\le\beta^\star\ \ \text{(slow forcing)}.
 \end{cases}\;}
 \tag{9.15}
 $$
 
-The rule is principled, not heuristic. When $\beta>\beta^\star$, only the flow map is accurate (the PWFO's phase-only summary cannot represent broadband forcing), so accuracy dictates the recurrent model whenever the horizon is affordable. When $t\le T_{\max}$, the recurrent cost $O(t/\Delta)$ is within budget and buys the strictly smaller, drift-free error, so the flow map is again preferred. Only in the remaining quadrant — $t$ so large that $O(t/\Delta)$ is unaffordable *and* forcing slow enough that the PWFO's drift is the sole (tolerable, $\mathcal L_{\text{freq}}$-bounded) error — does the $O(1)$ one-shot win, and there it wins decisively: constant wall-clock to arbitrary $t$ with flat amplitude. (Note that the first branch of (9.15) assigns the *fast-and-unbounded* corner $\{\beta>\beta^\star,\ t>T_{\max}\}$ to the flow map on accuracy grounds even though its cost is not affordable there; this is the least-bad routing, and the next paragraph shows the corner has no better — indeed no exact finite-cost — answer at all.)
+The rule is principled, not heuristic. When $\beta\gt \beta^\star$, only the flow map is accurate (the PWFO's phase-only summary cannot represent broadband forcing), so accuracy dictates the recurrent model whenever the horizon is affordable. When $t\le T_{\max}$, the recurrent cost $O(t/\Delta)$ is within budget and buys the strictly smaller, drift-free error, so the flow map is again preferred. Only in the remaining quadrant — $t$ so large that $O(t/\Delta)$ is unaffordable *and* forcing slow enough that the PWFO's drift is the sole (tolerable, $\mathcal L_{\text{freq}}$-bounded) error — does the $O(1)$ one-shot win, and there it wins decisively: constant wall-clock to arbitrary $t$ with flat amplitude. (Note that the first branch of (9.15) assigns the *fast-and-unbounded* corner $\{\beta\gt \beta^\star,\ t\gt T_{\max}\}$ to the flow map on accuracy grounds even though its cost is not affordable there; this is the least-bad routing, and the next paragraph shows the corner has no better — indeed no exact finite-cost — answer at all.)
 
-**The one unreachable corner.** Rule (9.15) covers three of the four quadrants with a genuinely satisfactory surrogate; the fourth — **fast forcing ($\beta>\beta^\star$) *and* truly unbounded $t$** — has *no finite-cost exact answer*. Informally but rigorously:
+**The one unreachable corner.** Rule (9.15) covers three of the four quadrants with a genuinely satisfactory surrogate; the fourth — **fast forcing ($\beta\gt \beta^\star$) *and* truly unbounded $t$** — has *no finite-cost exact answer*. Informally but rigorously:
 
 1. *Fast forcing forbids the $O(1)$ amortized route.* The PWFO's $O(1)$ evaluation rests on factoring the map $u(\cdot)\big|_{[0,t]}\mapsto x(t)$ through a *scalar* accumulated phase $\Phi(t)=\int_0^t\omega\,d\tau$ computed by a prefix-sum, plus a fixed single-attractor waveform. When $u$ carries energy at frequencies comparable to $\omega_0$ ($\beta\gtrsim1$), the true state genuinely depends on the *fine-time history* of $u$ — the "attractor" is chasing a fast-moving target and no longer exists as a fixed cycle — so $x(t)$ cannot be a function of a one-dimensional phase summary. Exactness for fast forcing therefore *requires resolving the actual trajectory*, i.e. a **recurrence**; this is exactly why the PWFO's fast-profile NRMSE is $0.72$–$0.77$ while the recurrent flow map's is $0.016$–$0.110$.
 
@@ -2668,6 +2672,57 @@ is device- and batch-dependent (measured on a 6 GB GPU at batch 256).
 
 ![Flow-map speedup over reference RK4, and the accuracy each method delivers at the coarse step](plots/results/bench_speedup_accuracy.png)
 
+### 10.7 Optimizing inference: larger-stride distillation (past 2×)
+
+The §10.6 flow-map ran at $\Delta=0.2$ (4× fewer steps than fine RK4) and reached only
+~1.7×. A paper-grounded review of fast-inference techniques (parallel-in-time DEER
+[arXiv:2309.12252], consistency/flow-map distillation [arXiv:2505.18825], mixed-precision
+neural ODEs [arXiv:2510.23498], persistent kernels [arXiv:2412.07752]) identified one lever
+whose speedup is guaranteed by step-count arithmetic for our latency-bound scan: **train the
+map to a larger stride.** Per-step FLOPs are fixed, and the wall-clock of the sequential
+rollout is ~linear in step count, so cutting steps cuts time ~proportionally. We therefore
+distilled the stepper to $\Delta=0.4$ and $\Delta=0.8$, feeding $n=5$ interior forcing samples
+per step (input dim $2\to7$) so the coarser step still sees the intra-step current
+(`flowmap_fast.py`, `flowmap_fast_train.py`). Exact wall-clock (batch 256, 6 GB GPU) at the
+canonical $T=300$ (8 cycles), vs the true integrator:
+
+| method | step $\Delta$ | steps | wall-clock | speedup vs fine RK4 | NRMSE vs fine RK4 |
+|---|---:|---:|---:|---:|---:|
+| RK4 fine (reference) | 0.05 | 6000 | 67.2 ms | 1.0× | — |
+| flow-map (old) | 0.2 | 1500 | 50.6 ms | 1.33× | 0.166 |
+| **flow-map (distilled)** | **0.4** | 750 | **24.7 ms** | **2.72×** | **0.140** |
+| **flow-map (distilled)** | **0.8** | 375 | **13.6 ms** | **4.94×** | 0.212 |
+| coarse RK4 | 0.8 | 375 | 5.6 ms | 12.1× | 0.233 |
+
+Across horizons $T\in[30,1000]$ the distilled maps give **2.7–3.6× ($\Delta=0.4$)** and
+**4.9–6.9× ($\Delta=0.8$)** over fine RK4 — comfortably past the 2× target. Two results are
+worth stating because they were not obvious:
+
+1. **Fewer steps also means *less* error.** The $\Delta=0.4$ map is not only ~2× faster than
+   the old $\Delta=0.2$ map, it is **more accurate at long horizons** (NRMSE 0.140 vs 0.166 at
+   $T=300$; 0.289 vs 0.319 at $T=1000$): a shorter scan accumulates less of the Grönwall error
+   of §8.3. Speed and long-horizon fidelity improve together.
+2. **At the aggressive step the learned map beats classical integration.** At $\Delta=0.8$ the
+   flow-map is **more accurate than coarse RK4 at the same step** (NRMSE 0.068/0.150/0.212/0.374
+   vs 0.084/0.173/0.233/0.404 at $T=30/100/300/1000$): RK4 cannot resolve the fast spike in a
+   $0.8$ step, while the trained map can. This is the accuracy-at-fixed-cost frontier crossing
+   in the right panel below — the first regime, even on *non-stiff* FHN, where the learned
+   stepper genuinely dominates the classical integrator (and it is exactly the mechanism that
+   pays off far more on stiff Hodgkin–Huxley, §12).
+
+![Larger-stride distillation: speedup past 2× (left) and the accuracy crossover where the learned map overtakes coarse RK4 (right)](plots/results/bench_stride_speedup.png)
+
+$\Delta$ is thus a **speed–accuracy knob**: $\Delta=0.4$ for ~3× at $\Delta=0.2$-or-better
+accuracy, $\Delta=0.8$ for ~5–7× at coarser accuracy. Further multipliers left on the table
+(paper-backed, not yet implemented): bf16 network evaluation with fp32 state accumulation
+(roundoff provably $O(\text{unit-roundoff})$ independent of step count, arXiv:2510.23498) plus a
+larger batch to saturate the GPU (~1.2–1.5× more), and — since the GPU is under-occupied at the
+2-wide state — an AOT-compiled C/SIMD cache-resident stepper that removes all dispatch/transfer
+overhead. Techniques deliberately **not** pursued (wrong regime for a tiny, non-stiff, 2-D
+state): DEER/associative-scan parallelization (no idle parallelism on a batch-saturated GPU),
+Parareal (no expensive fine solver to amortize), int8 (tiny GEMMs, state cannot be int8), and
+one-shot operator surrogates (their large speedups are a stiff-system effect).
+
 ---
 
 ## 11. What is in the repository (code map)
@@ -2696,7 +2751,9 @@ Surrogate (kept in the main directory):
 - `fhn_theory.py` — ground-truth spectral theory (fixed points, Jacobian eigenvalues,
   measured cycle frequency/amplitude), used for supervision and for the §1–§2 figures.
 - `results_figures.py` — regenerates every verification figure in `plots/results/` used by this report.
-- `flowmap_benchmark.py` — times the flow-map against fine/coarse RK4 across time scales (§10.6); emits `plots/results/bench_*.png`.
+- `flowmap_benchmark.py` — times the flow-map against fine/coarse RK4 across time scales (§10.6); emits `plots/results/bench_walltime.png`, `bench_speedup_accuracy.png`.
+- `flowmap_fast.py`, `flowmap_fast_train.py` — the larger-stride distilled flow-map (interior forcing) that pushes inference past 2× (§10.7).
+- `flowmap_speed_opt.py` — the optimized-inference benchmark ($\Delta=0.2/0.4/0.8$ vs RK4); emits `plots/results/bench_stride_speedup.png`.
 
 Superseded stages (the Stuart–Landau Koopman fix and dead experiments) are grouped under
 `archive/` and left intact as the research trail; the `.md` documents are the narrative.
@@ -2752,5 +2809,8 @@ python flowmap_train.py --steps 6000 --stride 4           # recurrent flow-map (
 python flowmap_eval.py  --model data/flowmap.pkl
 python results_figures.py                                 # verification figures -> plots/results/
 python flowmap_benchmark.py                               # flow-map vs RK4 speed across time scales
+python flowmap_fast_train.py --stride 8  --n-samp 5       # distilled Delta=0.4 map (>2x)
+python flowmap_fast_train.py --stride 16 --n-samp 5       # distilled Delta=0.8 map (~5-7x)
+python flowmap_speed_opt.py                               # optimized-inference benchmark + figure
 # hybrid: hybrid_model.predict(pwfo, flow, dt, x0, u_profile, t_query) -> (x, route)
 ```
