@@ -2814,3 +2814,181 @@ python flowmap_fast_train.py --stride 16 --n-samp 5       # distilled Delta=0.8 
 python flowmap_speed_opt.py                               # optimized-inference benchmark + figure
 # hybrid: hybrid_model.predict(pwfo, flow, dt, x0, u_profile, t_query) -> (x, route)
 ```
+
+## 15. Live intervention: the control-affine invertible surrogate and the stiffness crossover
+
+Sections 1–14 built a *forward* surrogate: given a current, predict the trajectory. The
+practical goal, however, is **intervention** — given a neuron and a desired next state,
+find the current that steers it there, fast enough to close the loop in real time. This
+section derives an invertible surrogate for that task, states the fair way to benchmark it
+against classical integration, and reports honestly where it wins and where it does not.
+
+### 15.1 Control-affine structure of conductance-based neurons
+
+Every model in this report shares one exact structural fact. Write the state as
+\(x=(V,\mathbf g)\) with membrane voltage \(V\) and gating variables \(\mathbf g\). The
+injected current \(u=I_\text{ext}\) enters **only** the voltage equation, additively:
+
+$$
+C\dot V = -I_\text{ion}(x) + u, \qquad \dot{\mathbf g} = r(V,\mathbf g).
+$$
+
+Collecting terms, the dynamics are **control-affine** with a *constant* input vector:
+
+$$
+\dot x = a(x) + b\,u, \qquad b = \tfrac1C\,e_V = \big(\tfrac1C,0,\dots,0\big)^{\!\top}.
+$$
+
+This holds verbatim for FitzHugh–Nagumo (\(b=(1,0)^\top\)), Hodgkin–Huxley
+(\(b=(1/C,0,0,0)^\top\)), the 7-D multi-channel cell of §15.6, and — crucially —
+for diffusively coupled *networks*, where node \(i\) sees the affine total input
+\(u_i = I_{\text{ext},i} + \sum_j W_{ij}(V_j-V_i)\) on the same voltage channel.
+
+### 15.2 The coarse flow is affine in a held current, to \(O(\Delta^2)\)
+
+Fix a coarse step \(\Delta\) and hold \(u\) constant across \([t,t+\Delta]\) (zero-order hold,
+exactly how a digital controller acts). Let \(\Phi_\Delta(x,u)\) be the exact time-\(\Delta\)
+flow. Expanding in the control, the sensitivity \(S(\tau)=\partial_u\varphi(\tau)\) obeys the
+variational equation
+
+$$
+\dot S = Da\big(\varphi(\tau)\big)\,S + b, \qquad S(0)=0,
+\qquad\Longrightarrow\qquad
+G(x) \;\equiv\; \partial_u\Phi_\Delta(x,0)=\int_0^\Delta \!M(\Delta,s)\,b\,\mathrm ds,
+$$
+
+with \(M\) the state-transition matrix of the linearization along \(\varphi\). Because the
+only \(u\)-dependence of \(a(\varphi)\) is through the accumulated state (itself \(O(\Delta)\)),
+the second derivative \(\partial_u^2\Phi_\Delta = O(\Delta^2)\). Hence
+
+$$
+\boxed{\;\Phi_\Delta(x,u) = F(x) + G(x)\,u + O(\Delta^2 u^2),\quad F(x)=\Phi_\Delta(x,0).\;}
+$$
+
+The map is **exactly** affine in \(u\) for a linear system and affine up to a curvature that
+vanishes with the step. The one place this bound is loose is a *spike crossing inside the
+step*: there the voltage nonlinearity is near-threshold in \(u\), the effective curvature is
+not small, and \(\Delta\) must be reduced (§15.6).
+
+### 15.3 The surrogate and its closed-form inverse
+
+We learn the two coarse-step fields directly with a shared-trunk MLP,
+
+$$
+F_\theta(x)=x+\mathrm{sd}\odot\mathrm{MLP}_F(\hat x),\qquad
+G_\theta(x)=\mathrm{sd}\odot\mathrm{MLP}_G(\hat x)+g_\text{floor}\,e_V,\qquad
+\hat x=(x-\mu)/\mathrm{sd},
+$$
+
+so that \(x_{t+\Delta}=F_\theta(x_t)+G_\theta(x_t)\,u_t\). Only \(u\) is constrained to enter
+affinely; \(F_\theta,G_\theta\) are unconstrained, so no forward accuracy is traded for
+invertibility. The floor \(g_\text{floor}e_V\) keeps the voltage channel of \(G\) bounded away
+from zero — physically justified because injected current always moves \(V\) — so the inverse
+below can never divide by zero.
+
+**Inversion.** For a target \(x^\star\), the current is the scalar least-squares solution of
+\(\min_u\|F_\theta(x)+G_\theta(x)u-x^\star\|^2\):
+
+$$
+\boxed{\;u^\star=\dfrac{\big\langle G_\theta(x),\,x^\star-F_\theta(x)\big\rangle}
+{\big\langle G_\theta(x),G_\theta(x)\big\rangle},\qquad
+u^\star\leftarrow\mathrm{clip}(u^\star,U_\text{lo},U_\text{hi}).\;}
+$$
+
+For a scalar control the box-constrained optimum **is** the clipped unconstrained optimum
+(the feasible set is an interval, the objective a convex parabola), so the clip is exact, not
+a heuristic. A scalar \(u\) can only move the state along the rank-one direction \(G\); the
+unreachable part is the residual \(r=(I-GG^\top/\langle G,G\rangle)(x^\star-F)\), which we
+report rather than hide. This is one MLP forward pass and a dot product: no optimizer, no
+iteration, \(O(1)\) in the stiffness of the underlying neuron.
+
+### 15.4 The only fair benchmark, and why forward-only is the wrong one
+
+Comparing a surrogate forward pass against one RK4 step is the wrong contest for control,
+because RK4 has *no inverse*: to steer the true model you must **solve** for \(u\). The honest
+baseline grants the classical model the *same* affine structure the surrogate exploits —
+**linearize once**:
+
+$$
+\text{rk4\_lin1:}\quad f_0=\Phi_\Delta^{\text{RK4}}(x,0),\;\;
+g=\tfrac1\delta\big(\Phi_\Delta^{\text{RK4}}(x,\delta)-f_0\big),\;\;
+u^\star=\frac{\langle g,x^\star-f_0\rangle}{\langle g,g\rangle}.
+$$
+
+This is *two* coarse solves and zero iterations — and on a system where \(\Phi_\Delta\) is
+affine in \(u\), it is as accurate as the surrogate by construction. The surrogate beats it
+only when
+
+$$
+\boxed{\;\text{cost}\big(2\,\Phi_\Delta^{\text{RK4}}\ \text{solves}\big)\;>\;
+\text{cost}\big(1\ \text{MLP forward}\big).\;}
+$$
+
+Each \(\Phi_\Delta^{\text{RK4}}\) solve costs \(n_\text{sub}=\lceil\Delta/\Delta t_\text{stable}\rceil\)
+sequential vector-field evaluations, where explicit stability caps
+\(\Delta t_\text{stable}\lesssim c/\max_i|\mathrm{Re}\,\lambda_i(Da)|\). So the crossover is
+governed by exactly two quantities: the **stiffness** \(n_\text{sub}\) and the **per-evaluation
+cost** of the vector field (channels, dimension). This is the lens for every result below.
+
+### 15.5 FitzHugh–Nagumo: an honest null result
+
+FHN is non-stiff (\(\kappa=\max|\mathrm{Re}\,\lambda|/\min|\mathrm{Re}\,\lambda|\sim O(10)\))
+and two-dimensional. Explicit RK4 is stable at a coarse step, so \(n_\text{sub}\!\approx\!1\)
+and one \(\Phi_\Delta\) solve is a handful of cheap flops — far below one \(128\times128\) MLP
+forward. The consequence, confirmed empirically, is unambiguous: **on FHN the invertible
+surrogate wins neither the forward rollout nor the fair control loop.** `rk4_lin1` inverts the
+true model in two cheap solves, more accurately and with fewer flops than the network. We
+report this as the expected outcome of §15.4, not a failure — FHN simply sits below the
+crossover.
+
+### 15.6 Hodgkin–Huxley and a realistic multi-channel cell: the crossover in action
+
+Stiffness changes the accounting. For the standard HH cell, correctly parameterized, explicit
+RK4 **diverges** for \(\Delta t\ge0.1\) ms; a coarse step \(\Delta=0.4\) ms therefore needs
+\(n_\text{sub}\approx8\) stable substeps. Coarse RK4 *at* \(\Delta\) is not a usable baseline
+at all — it blows up — so the surrogate is the **only stable big-step integrator**, running
+\(\sim\!7\times\) faster than the fine RK4 that stiffness forces upon the classical solver.
+
+The control-loop win, however, is regime-dependent on textbook HH (4-D, cheap field): the
+surrogate wins the **latency-bound** corner — few neurons, real-time closed loop — by
+\(4\text{–}14\times\), because a single control decision cannot be batched across the
+\(2n_\text{sub}\) sequential stiff substeps; at batch \(1\) it meets the \(\sim\!1\) ms/neuron
+biological budget (\(0.22\) ms) where the fair stiff-RK4 controller misses it (\(1.5\) ms).
+At large batch with a cheap field, classical integration reclaims the throughput corner.
+
+Realistic neurons remove that caveat. A 7-D multi-channel cell (HH + M-current +
+A-current, fast-spiking kinetics; §code `multichan_model.py`) has a vector field \(\sim\!5\times\)
+costlier per evaluation and comparable stiffness. Its crossover map is qualitatively
+different from HH's: the classical-wins corner **collapses**. At genuine stiffness
+(\(n_\text{sub}\ge16\)) the surrogate wins across **every** batch size tested, \(2\text{–}22\times\),
+including the high-throughput scale where it lost on HH. The lesson is a monotone law:
+
+> The invertible surrogate's advantage grows with stiffness (\(n_\text{sub}\)) and with
+> per-evaluation cost (channels, dimension), and shrinks with batch. Textbook single-neuron
+> FHN/HH are the *worst case*; every step toward biological realism — more channels, faster
+> kinetics, and ultimately coupled networks — enlarges the region where one closed-form
+> inverse beats a stiff optimal-control solve.
+
+### 15.7 Honest limitations
+
+The surrogate is an *approximate* model, so its closed-loop tracking (a few percent NRMSE)
+cannot match a controller that inverts the exact stiff model when that model is cheap enough
+to run in the loop. Its value is precisely the regime where the exact stiff solve is *not*
+cheap enough: hard real-time on few units, high-channel-count cells, and networks. Fast
+spikes crossing a coarse step break the affine-in-\(u\) bound of §15.2 and degrade both the
+surrogate and `rk4_lin1`, forcing a smaller \(\Delta\); the accuracy–speed frontier, not a
+single operating point, is the honest object. Single-neuron GPU latency is partly
+dispatch-bound, so we report per-evaluation counts and sequential depth as the primary,
+hardware-independent metrics and wall-clock/throughput as secondary.
+
+### 15.8 How to reproduce (invertible-surrogate track)
+
+```bash
+python neuron_data.py  --neuron hh_model       --dt 0.02 --stride 20 --tc 250 --out data/hh_operator.npz
+python neuron_data.py  --neuron multichan_model --dt 0.02 --stride 10 --tc 500 --out data/mc_operator_s10.npz
+python flowmap_affine_train.py --data data/hh_operator.npz     --out data/affine_hh.pkl     --steps 8000
+python flowmap_affine_train.py --data data/mc_operator_s10.npz --out data/affine_mc_s10.pkl --steps 9000
+python neuron_bench.py      --model data/affine_mc_s10.pkl --batch 256   # forward + 3-way control
+python neuron_crossover.py  --neuron hh_model                            # crossover map (cheap 4-D cell)
+python neuron_crossover.py  --neuron multichan_model                     # crossover map (realistic 7-D cell)
+```
