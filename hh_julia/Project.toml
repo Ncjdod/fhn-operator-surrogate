@@ -1,0 +1,26 @@
+name = "HHSurrogate"
+uuid = "0f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8"
+authors = ["fhn-operator-surrogate"]
+version = "0.1.0"
+
+# Core dependencies (all pure-Julia or with a CPU backend — the package runs and is
+# tested on CPU with zero GPU packages installed). GPU acceleration and neural-network
+# training are opt-in: `Pkg.add("CUDA")` / `Pkg.add(["Zygote","Optimisers"])` and the
+# code picks up the GPU backend automatically via KernelAbstractions.get_backend.
+[deps]
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+KernelAbstractions = "0.9"
+StaticArrays = "1"
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

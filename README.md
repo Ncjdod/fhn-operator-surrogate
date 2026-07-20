@@ -28,3 +28,17 @@ python flowmap_eval.py
 ```
 
 All detailed research findings, design decisions, and math derivations are available in **[REPORT.md](REPORT.md)**.
+
+## Hodgkin–Huxley extension (Julia / CUDA) — `hh_julia/`
+
+The project is carried over to **biophysical Hodgkin–Huxley** neurons in a native-Windows,
+GPU-accelerated Julia package under **[`hh_julia/`](hh_julia/README.md)**. It adds GPU-batched
+HH/stiff solvers (KernelAbstractions, CPU + CUDA), a multi-compartment cable with a line-source
+**electrical image** forward model, the control-affine flow-map surrogate with its closed-form
+inverse, and a **differentiable biophysical inverse** (channel-density recovery + neurostimulation
+design), taking reference from Lotlikar et al. (2026), *Learning Biophysical Models of Large-Scale
+Multineuronal Data to Enable Precise Neurostimulation*.
+
+Julia is used because JAX has no native-Windows GPU backend (it needs WSL2); `CUDA.jl` targets the
+GTX 1660 Ti directly with no WSL2. The Python/JAX code here is unchanged. See
+[`hh_julia/README.md`](hh_julia/README.md) for setup, benchmarks, and validation.
