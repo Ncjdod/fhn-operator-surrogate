@@ -1,0 +1,4 @@
+controller,track_nrmse,stiff_substeps_per_step,wall_ms
+surrogate,0.82241,0,0.404
+lin1,0.00014,16,0.27
+gn6,0.0,96,1.702

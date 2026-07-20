@@ -26,8 +26,13 @@ const to_dev = if USE_GPU
 else
     identity
 end
+const dev_sync = USE_GPU ? () -> Base.invokelatest(CUDA.synchronize) : () -> nothing
 const DEV = USE_GPU ? "CUDA" : "CPU"
-const OUT = normpath(joinpath(@__DIR__, "..", "results", "data"))
+const OUT = normpath(joinpath(@__DIR__, "..", "results", getopt("out", "data")))
+# The batched arrays are Float32. On the CPU a Float64 model just promotes, but inside a GPU
+# kernel the resulting Dual{1,Float32} -> Dual{1,Float64} promotion in `phi_and_sens` is inferred
+# dynamically and the control kernels fail to compile. Match the model to the device.
+const MT = USE_GPU ? Float32 : Float64
 
 const META = String[]
 pushmeta!(k, v) = push!(META, "$k=$v")
@@ -35,14 +40,19 @@ wr(name, A; header=nothing) = open(joinpath(OUT, name), "w") do io
     header !== nothing && println(io, header)
     writedlm(io, A, ',')
 end
-best_time(f, reps=(QUICK ? 3 : 8)) = (f(); minimum(begin t=time(); f(); time()-t end for _ in 1:reps))
+# `time()` is the wall clock and ticks at ~1 ms on Windows, which quantizes every measurement here
+# (the sub-ms surrogate step reads as exactly 0). `time_ns()` is the monotonic timer. GPU launches
+# are asynchronous, so each timed region also has to be closed with a device synchronize.
+best_time(f, reps=(QUICK ? 3 : 8)) =
+    (f(); dev_sync();
+     minimum(begin t = time_ns(); f(); dev_sync(); (time_ns() - t) / 1e9 end for _ in 1:reps))
 Vrow(Y, ch, j) = collect(Y[ch, :, j])
 
 function main()
     mkpath(OUT)
     println("== run_comparison ==  device=$DEV  quick=$QUICK  steps=$NSTEPS")
     rng = MersenneTwister(1234321)
-    model = HHClassic(); d = statedim(model)
+    model = HHClassic{MT}(); d = statedim(model)
     dt = 0.02; stride = 8; D = stride * dt
     N = QUICK ? 96 : 512
     K = QUICK ? 60 : 120
@@ -55,7 +65,10 @@ function main()
     mu, sd = standardize_stats(Y)
     s = AffineFlowMap(d; hidden=(128, 128), rng=rng, mu=Array(mu), sd=Array(sd),
                       g_floor=Float32(max(0.05, 0.3D)))
-    hist = train!(s, to_dev(Uc), to_dev(Y); steps=NSTEPS, batch=64, rng=rng)
+    USE_GPU && to_device!(s, to_dev)   # the weights have to sit on the same device as the batches
+    ttrain = @elapsed hist = train!(s, to_dev(Uc), to_dev(Y); steps=NSTEPS, batch=64, rng=rng)
+    pushmeta!("train_steps", NSTEPS); pushmeta!("train_seconds", round(ttrain, digits=1))
+    @printf("      trained %d steps in %.1f s (%.1f steps/s)\n", NSTEPS, ttrain, NSTEPS / ttrain)
     wr("loss.csv", reshape(hist, :, 1); header="loss")
 
     # 2) ROLLOUT -------------------------------------------------------------------------------
@@ -80,11 +93,45 @@ function main()
         Ub = to_dev(Float32.(clamp.(rand(rng, K, B) .* (hi - lo) .+ lo, u_bounds(model)...)))
         tfine = best_time(() -> rollout_rk4(model, Xb, Ub, dt, stride; trajectory=false))
         tros  = best_time(() -> rollout_rosenbrock(model, Xb, Ub, D / 8, 8; trajectory=false))
-        tsur  = best_time(() -> FG(s, Xb))
-        push!(rows, [B, tfine * 1e3, tros * 1e3, tsur * 1e3, tfine / tsur])
+        # Two surrogate costs, and the difference matters: `sur1step` is ONE coarse step, which is
+        # what the per-step-cost claim is about, while the solver columns integrate the whole
+        # K-step horizon. Only `surRollout` (K coarse steps, same horizon) is comparable to them,
+        # so the speedup column is computed from that one.
+        t1    = best_time(() -> FG(s, Xb))
+        troll = best_time(() -> rollout(s, Xb, Ub))
+        push!(rows, [B, tfine * 1e3, tros * 1e3, t1 * 1e3, troll * 1e3, tfine / troll])
     end
-    wr("forward_bench.csv", permutedims(hcat(rows...)); header="batch,fineRK4_ms,ros2_ms,sur_ms,speedup")
-    pushmeta!("fwd_speedup_max", round(maximum(r[5] for r in rows), digits=1))
+    wr("forward_bench.csv", permutedims(hcat(rows...));
+       header="batch,fineRK4_ms,ros2_ms,sur1step_ms,surRollout_ms,speedup")
+    pushmeta!("fwd_speedup_max", round(maximum(r[6] for r in rows), digits=1))
+    pushmeta!("horizon_steps", K)
+
+    # 3b) ACCURACY-vs-COST PARETO ---------------------------------------------------------------
+    # The table above times each method at *its own* accuracy, which flatters the surrogate. The
+    # honest comparison is to spend the same wall clock on the classical solvers: hold the coarse
+    # step D fixed and give RK4 / Rosenbrock fewer substeps per step, then measure both the error
+    # against a converged reference and the time. That puts every method on one accuracy-vs-cost
+    # plane, and the surrogate (zero substeps, one MLP forward per step) is just another point.
+    println("[3b/6] accuracy-vs-cost pareto …")
+    Bp = QUICK ? 64 : 1024
+    Xp = to_dev(Float32.(random_init(model, rng, Bp)))
+    Up = to_dev(Float32.(clamp.(rand(rng, K, Bp) .* (hi - lo) .+ lo, u_bounds(model)...)))
+    # converged reference: 4x the substeps used to generate the training data
+    ref = Array(rollout_rk4(model, Xp, Up, dt / 4, stride * 4; trajectory=true))
+    sdv = reshape(Array(sd), d, 1, 1)
+    perr(A) = sqrt(sum(((Array(A) .- ref) ./ sdv) .^ 2) / length(ref))
+    prows = Vector{Vector{Any}}()
+    for ns in (1, 2, 4, stride)
+        push!(prows, ["rk4", ns, best_time(() -> rollout_rk4(model, Xp, Up, D / ns, ns; trajectory=false)) * 1e3,
+                      perr(rollout_rk4(model, Xp, Up, D / ns, ns; trajectory=true))])
+    end
+    for ns in (1, 2, 4, 8)
+        push!(prows, ["ros2", ns, best_time(() -> rollout_rosenbrock(model, Xp, Up, D / ns, ns; trajectory=false)) * 1e3,
+                      perr(rollout_rosenbrock(model, Xp, Up, D / ns, ns; trajectory=true))])
+    end
+    push!(prows, ["surrogate", 0, best_time(() -> rollout(s, Xp, Up)) * 1e3, perr(rollout(s, Xp, Up))])
+    wr("pareto.csv", permutedims(hcat(prows...)); header="method,substeps,wall_ms,nrmse")
+    pushmeta!("pareto_batch", Bp)
 
     # 4) CONTROL -------------------------------------------------------------------------------
     println("[4/6] control comparison …")

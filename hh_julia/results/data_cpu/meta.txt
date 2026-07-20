@@ -1,0 +1,16 @@
+device=CPU
+dt=0.02
+stride=8
+D_ms=0.16
+horizon_ms=19.2
+train_steps=4000
+train_seconds=325.4
+rollout_nrmse=0.2351
+fwd_speedup_max=0.8
+horizon_steps=120
+pareto_batch=1024
+cable_velocity_mps=0.492
+cable_dt_ms=0.025
+ei_three_phase=true
+stim_threshold=2.237
+recovery_max_gNa_err=0.033

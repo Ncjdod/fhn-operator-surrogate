@@ -32,7 +32,11 @@ function forward_bench(model, D, dt_data, nsub_data; batches=(64,256,1024), hori
     lo, hi = firing_band(model)
     d = statedim(model)
     println("\n== FORWARD ==  model=$(nameof(typeof(model)))  D=$(round(D,digits=3)) ms  horizon=$(round(horizon*D))ms  device=$(USE_GPU ? "GPU" : "CPU")")
-    @printf("  %-8s %10s %10s %10s   %s\n", "batch", "fineRK4 ms", "ROS2 ms", "sur1 ms", "sur speedup×(vs fineRK4)")
+    # `sur1` is one coarse step; `surRoll` is the same horizon the solver columns integrate. The
+    # speedup is horizon-for-horizon, so it comes from surRoll -- comparing sur1 against a full
+    # solver rollout would just be measuring the horizon length.
+    @printf("  %-8s %10s %10s %10s %10s   %s\n", "batch", "fineRK4 ms", "ROS2 ms", "sur1 ms",
+            "surRoll ms", "sur speedup×(vs fineRK4)")
     rng = MersenneTwister(0)
     # a random-weight surrogate is fine for *timing* the 1-step forward cost
     s = AffineFlowMap(d; hidden=(128,128), rng=rng, sd=ones(Float32,d), g_floor=0.2f0)
@@ -43,7 +47,9 @@ function forward_bench(model, D, dt_data, nsub_data; batches=(64,256,1024), hori
         t_fine = best_time(() -> rollout_rk4(model, X0, Uc, dt_data, nsub_data; trajectory=false))
         t_ros  = best_time(() -> rollout_rosenbrock(model, X0, Uc, D/8, 8; trajectory=false))
         t_sur  = best_time(() -> begin F,G = FG(s, X0); F .+ G end)   # 1 MLP forward
-        @printf("  %-8d %10.2f %10.2f %10.4f   %.1f×\n", B, t_fine*1e3, t_ros*1e3, t_sur*1e3, t_fine/t_sur)
+        t_roll = best_time(() -> rollout(s, X0, Uc))                  # full horizon, like above
+        @printf("  %-8d %10.2f %10.2f %10.4f %10.2f   %.1f×\n", B, t_fine*1e3, t_ros*1e3,
+                t_sur*1e3, t_roll*1e3, t_fine/t_roll)
     end
 end
 
