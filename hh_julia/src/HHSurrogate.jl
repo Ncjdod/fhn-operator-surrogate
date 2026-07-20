@@ -45,7 +45,7 @@ export HHCableChannels, CableGeometry, CableState, straight_axon_geometry, cable
        simulate_cable
 export hex_electrode_patch, electrical_image, ei_features
 # surrogate + control
-export AffineFlowMap, FG, flow_step, invert, rollout, params, loss_and_grads
+export AffineFlowMap, FG, flow_step, invert, rollout, params, loss_and_grads, to_device!
 export train!, standardize_stats, Adam, adam_step!, clip_global_norm!, global_norm
 export make_dataset, control_sensitivity
 export control_lin1, control_gn, closed_loop, phi_and_sens

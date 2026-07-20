@@ -18,7 +18,15 @@ else
     identity
 end
 
-best_time(f, reps=8) = (f(); minimum(begin t=time(); f(); time()-t end for _ in 1:reps))
+# GPU launches are asynchronous, so every timed region has to be closed with a device sync or the
+# numbers just measure the launch cost.
+const dev_sync = USE_GPU ? () -> CUDA.synchronize() : () -> nothing
+
+# `time()` is the wall clock -- on Windows it ticks at ~1 ms, which quantizes every measurement
+# here (and reads the sub-ms surrogate step as exactly 0). `time_ns()` is the monotonic timer.
+best_time(f, reps=8) = (f(); dev_sync();
+                        minimum(begin t=time_ns(); f(); dev_sync(); (time_ns()-t)/1e9 end
+                                for _ in 1:reps))
 
 function forward_bench(model, D, dt_data, nsub_data; batches=(64,256,1024), horizon=100)
     lo, hi = firing_band(model)
@@ -28,6 +36,7 @@ function forward_bench(model, D, dt_data, nsub_data; batches=(64,256,1024), hori
     rng = MersenneTwister(0)
     # a random-weight surrogate is fine for *timing* the 1-step forward cost
     s = AffineFlowMap(d; hidden=(128,128), rng=rng, sd=ones(Float32,d), g_floor=0.2f0)
+    USE_GPU && to_device!(s, to_dev)   # weights must sit on the same device as the batch
     for B in batches
         X0 = to_dev(Float32.(random_init(model, rng, B)))
         Uc = to_dev(Float32.(clamp.(rand(rng, horizon, B).*(hi-lo).+lo, u_bounds(model)...)))
@@ -63,11 +72,16 @@ function control_bench(model, D, dt_data, nsub_data; batch=128, steps=60)
 end
 
 function main()
-    hh = HHClassic(); dt = 0.02; nsub = 20; D = dt*nsub
+    # The batches are Float32. On CPU a Float64 model just promotes, but inside a GPU kernel the
+    # Dual{1,Float32} -> Dual{1,Float64} promotion in `phi_and_sens` is inferred dynamically and
+    # the kernel fails to compile ("unsupported call to jl_f_apply_type"). Match the model's
+    # element type to the data on GPU; keep Float64 on CPU so those numbers are unchanged.
+    MT = USE_GPU ? Float32 : Float64
+    hh = HHClassic{MT}(); dt = 0.02; nsub = 20; D = dt*nsub
     println("HHSurrogate benchmarks — device=$(USE_GPU ? "CUDA" : "CPU")")
     forward_bench(hh, D, dt, nsub)
     control_bench(hh, D, dt, nsub)
-    mc = MultiChan(); println("\n----- stiffer 7-D multichannel cell -----")
+    mc = MultiChan{MT}(); println("\n----- stiffer 7-D multichannel cell -----")
     forward_bench(mc, D, dt, nsub; batches=(64,256))
 end
 

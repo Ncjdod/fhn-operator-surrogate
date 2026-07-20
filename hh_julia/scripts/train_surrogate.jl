@@ -32,20 +32,26 @@ rng = MersenneTwister(1)
 X0, Uc, Y = make_dataset(model; N=512, K=150, stride=stride, dt=dt, seed=1)
 mu, sd = standardize_stats(Y)
 
-# move to device if requested
+s = AffineFlowMap(d; hidden=(128,128), rng=rng, mu=mu, sd=sd,
+                  g_floor=Float32(max(0.05, 0.3*D)))
+
+# move data AND model to the device -- the BPTT is plain broadcasts/GEMMs, but they only compile
+# if the parameters and the training arrays live on the same side.
 if use_gpu
     using CUDA
-    Uc = CuArray(Uc); Y = CuArray(Y); mu = CuArray(mu); sd = CuArray(sd)
+    Uc = CuArray(Uc); Y = CuArray(Y)
+    to_device!(s,CuArray)
+    println("device: $(CUDA.name(CUDA.device()))")
 end
 
-s = AffineFlowMap(d; hidden=(128,128), rng=rng, mu=Array(mu), sd=Array(sd),
-                  g_floor=Float32(max(0.05, 0.3*D)))
 hist = train!(s, Uc, Y; steps=nsteps, batch=64, rng=rng)
+
+use_gpu && to_device!(s,Array)   # evaluate and serialize on the host
 
 # held-out full-rollout NRMSE
 Xte, Ute, Yte = make_dataset(model; N=64, K=150, stride=stride, dt=dt, seed=999)
 Yhat = rollout(s, Yte[:,1,:], Ute)
-nrmse = sqrt(sum(((Yhat .- Yte) ./ reshape(Array(sd), d, 1, 1)).^2) / length(Yte))
+nrmse = sqrt(sum(((Yhat .- Yte) ./ reshape(sd, d, 1, 1)).^2) / length(Yte))
 @printf("done. first-loss=%.4g last-loss=%.4g  held-out full-rollout NRMSE=%.4f\n", hist[1], hist[end], nrmse)
 
 out = joinpath(@__DIR__, "..", "affine_$(modelname).jls")

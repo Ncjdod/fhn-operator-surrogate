@@ -20,11 +20,12 @@ mutable struct AffineFlowMap{T}
     trunk::Vector{Dense}
     Fh::Dense              # F-residual head (linear)
     Gh::Dense              # G (control sensitivity) head (linear)
-    mu::Vector{T}          # per-channel input mean (standardization)
-    sd::Vector{T}          # per-channel input std
+    mu::AbstractVector{T}  # per-channel input mean (standardization)
+    sd::AbstractVector{T}  # per-channel input std
     v_chan::Int            # voltage channel index (1)
     g_floor::T             # absolute floor on the voltage-channel control gain
     d::Int
+    gmask::AbstractVector{T}  # e_{v_chan}; kept as a field so it lives on the model's device
 end
 
 function AffineFlowMap(d::Int; hidden=(128, 128), rng, mu=zeros(d), sd=ones(d),
@@ -36,7 +37,32 @@ function AffineFlowMap(d::Int; hidden=(128, 128), rng, mu=zeros(d), sd=ones(d),
     end
     Fh = dense(sizes[end], d; rng=rng, scale=0.1, T=T)
     Gh = dense(sizes[end], d; rng=rng, scale=0.05, T=T)
-    return AffineFlowMap{T}(trunk, Fh, Gh, T.(mu), T.(sd), v_chan, T(g_floor), d)
+    gmask = T[i == v_chan ? 1 : 0 for i in 1:d]
+    return AffineFlowMap{T}(trunk, Fh, Gh, T.(mu), T.(sd), v_chan, T(g_floor), d, gmask)
+end
+
+# ---- device placement -------------------------------------------------------------------------
+_dense_to(L::Dense, to) = Dense(to(L.W), to(L.b))
+
+"""
+    to_device!(s, to) -> s
+
+Move every array the surrogate owns (trunk/head weights, standardization stats, the G floor mask)
+through `to` — e.g. `to_device!(s, CuArray)` before GPU training, `to_device!(s, Array)` to bring
+it back. The forward/backward passes are plain broadcasts and GEMMs, so they follow the arrays;
+they just require the parameters and the data to sit on the *same* device. (Named `to_device!`
+rather than `device!` to avoid clashing with `CUDA.device!`, which selects the active GPU.)
+"""
+function to_device!(s::AffineFlowMap, to)
+    for i in eachindex(s.trunk)
+        s.trunk[i] = _dense_to(s.trunk[i], to)
+    end
+    s.Fh = _dense_to(s.Fh, to)
+    s.Gh = _dense_to(s.Gh, to)
+    s.mu = to(s.mu)
+    s.sd = to(s.sd)
+    s.gmask = to(s.gmask)
+    return s
 end
 
 # Ordered parameter references (for the Adam optimizer to update in place).
@@ -55,16 +81,13 @@ function FG(s::AffineFlowMap, X::AbstractMatrix)
     H, _ = trunk_forward(s.trunk, A0)
     F = X .+ s.sd .* (s.Fh.W * H .+ s.Fh.b)
     G = s.sd .* (s.Gh.W * H .+ s.Gh.b)
-    G = _apply_floor(G, s.v_chan, s.g_floor)
+    G = _apply_floor(G, s.gmask, s.g_floor)
     return F, G
 end
 
-# Add the voltage-channel floor without scalar-indexing a GPU array (row-mask add).
-function _apply_floor(G, v_chan, g_floor)
-    d = size(G, 1)
-    mask = reshape(Float32[i == v_chan ? 1f0 : 0f0 for i in 1:d], d, 1)
-    return G .+ g_floor .* mask
-end
+# Add the voltage-channel floor without scalar-indexing a GPU array (row-mask add). `gmask` lives
+# on the same device as the parameters, so this stays a single fused device broadcast.
+_apply_floor(G, gmask::AbstractVector, g_floor) = G .+ g_floor .* gmask
 
 "One coarse step x -> F(x) + G(x).*u  (u is a length-N vector)."
 function flow_step(s::AffineFlowMap, X::AbstractMatrix, u::AbstractVector)
@@ -142,7 +165,7 @@ function loss_and_grads(s::AffineFlowMap, X0::AbstractMatrix, Uc::AbstractMatrix
         H, tc = trunk_forward(s.trunk, A0)
         F = X .+ sd .* (s.Fh.W * H .+ s.Fh.b)
         G = sd .* (s.Gh.W * H .+ s.Gh.b)
-        G = _apply_floor(G, s.v_chan, s.g_floor)
+        G = _apply_floor(G, s.gmask, s.g_floor)
         u = reshape(view(Uc, k, :), 1, :)
         Xn = F .+ G .* u
         Xs[k] = X; Fs[k] = F; Gs[k] = G; Hs[k] = H; tcs[k] = tc
